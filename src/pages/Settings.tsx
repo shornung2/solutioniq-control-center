@@ -1,17 +1,26 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { API_URL, WS_URL } from "@/lib/api";
+import { api, API_URL, WS_URL } from "@/lib/api";
 import { useConnectionStatus } from "@/hooks/use-connection-status";
+import type { Capability } from "@/lib/types";
 
 export default function SettingsPage() {
   const { toast } = useToast();
   const isConnected = useConnectionStatus();
   const [notifications, setNotifications] = useState(true);
+
+  const { data: capabilities = [], isLoading: capLoading } = useQuery<Capability[]>({
+    queryKey: ["capabilities"],
+    queryFn: () => api.get<Capability[]>("/capabilities"),
+  });
 
   const save = () => {
     toast({ title: "Settings saved", description: "Your preferences have been updated." });
@@ -40,6 +49,38 @@ export default function SettingsPage() {
               <span className="text-sm text-muted-foreground">{isConnected ? "Connected" : "Disconnected"}</span>
             </div>
             <p className="text-xs text-muted-foreground">Authentication is managed securely via encrypted secrets.</p>
+          </CardContent>
+        </Card>
+
+        {/* Capabilities Manager */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-heading">Capabilities</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {capLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-8 w-full" />
+                ))}
+              </div>
+            ) : capabilities.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No capabilities data available</p>
+            ) : (
+              <div className="space-y-3">
+                {capabilities.map((cap) => (
+                  <div key={cap.name} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                    <div>
+                      <p className="text-sm font-medium capitalize">{cap.name}</p>
+                      {cap.description && <p className="text-xs text-muted-foreground">{cap.description}</p>}
+                    </div>
+                    <Badge variant={cap.enabled ? "default" : "outline"}>
+                      {cap.enabled ? "Enabled" : "Disabled"}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

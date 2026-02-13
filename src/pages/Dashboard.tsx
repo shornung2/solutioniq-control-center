@@ -1,9 +1,11 @@
-import { Activity, CheckCircle2, Clock, TrendingUp, Play, RefreshCw, FileText, AlertCircle } from "lucide-react";
+import { Activity, CheckCircle2, Clock, TrendingUp, Play, Pause, RefreshCw, AlertCircle, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Layout } from "@/components/Layout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDashboardData } from "@/hooks/use-dashboard";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { useDashboardData, useAgentStatus, useBudgetUsage, useAgentControl } from "@/hooks/use-dashboard";
 import {
   Area,
   AreaChart,
@@ -16,8 +18,10 @@ import {
 const iconMap: Record<string, typeof Activity> = {
   "Active Tasks": Activity,
   "Completed Today": CheckCircle2,
+  "Tasks Completed": CheckCircle2,
   "Success Rate": TrendingUp,
   "Avg Response": Clock,
+  "Avg Duration": Clock,
 };
 
 const statusColors: Record<string, string> = {
@@ -27,12 +31,85 @@ const statusColors: Record<string, string> = {
   pending: "bg-secondary/20 text-secondary",
 };
 
+const agentStatusColors: Record<string, string> = {
+  active: "bg-green-500",
+  paused: "bg-yellow-500",
+  busy: "bg-primary",
+};
+
 export default function Dashboard() {
   const { data, isLoading, isError, refetch } = useDashboardData();
+  const { data: agentStatus, isLoading: statusLoading } = useAgentStatus();
+  const { data: budget, isLoading: budgetLoading } = useBudgetUsage();
+  const { pause, resume } = useAgentControl();
+
+  const budgetPercent = budget ? Math.round((budget.used / budget.limit) * 100) : 0;
 
   return (
     <Layout>
       <div className="space-y-6">
+        {/* Agent Status & Budget */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Card className="glow-orange">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-heading">Agent Status</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between">
+              {statusLoading ? (
+                <Skeleton className="h-8 w-24" />
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span className={`h-3 w-3 rounded-full ${agentStatusColors[agentStatus?.status || ""] || "bg-muted"}`} />
+                  <span className="text-lg font-bold capitalize">{agentStatus?.status || "Unknown"}</span>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1"
+                  onClick={() => pause.mutate()}
+                  disabled={pause.isPending || agentStatus?.status === "paused"}
+                >
+                  <Pause className="h-3 w-3" /> Pause
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1"
+                  onClick={() => resume.mutate()}
+                  disabled={resume.isPending || agentStatus?.status === "active"}
+                >
+                  <Play className="h-3 w-3" /> Resume
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-heading flex items-center gap-2">
+                <Zap className="h-4 w-4 text-primary" /> Token Usage
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {budgetLoading ? (
+                <Skeleton className="h-8 w-full" />
+              ) : budget ? (
+                <div className="space-y-2">
+                  <Progress value={budgetPercent} className="h-3" />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{budget.used.toLocaleString()} used</span>
+                    <span>{budget.limit.toLocaleString()} limit</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No budget data</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {isLoading ? (
@@ -128,11 +205,8 @@ export default function Dashboard() {
               <Button className="w-full justify-start gap-2" variant="outline">
                 <Play className="h-4 w-4" /> Run Analysis
               </Button>
-              <Button className="w-full justify-start gap-2" variant="outline">
-                <RefreshCw className="h-4 w-4" /> Sync Data
-              </Button>
-              <Button className="w-full justify-start gap-2" variant="outline">
-                <FileText className="h-4 w-4" /> Generate Report
+              <Button className="w-full justify-start gap-2" variant="outline" onClick={() => refetch()}>
+                <RefreshCw className="h-4 w-4" /> Refresh Data
               </Button>
             </CardContent>
           </Card>
