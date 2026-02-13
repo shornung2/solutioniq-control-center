@@ -1,11 +1,11 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { DashboardData, AgentStatus, BudgetUsage } from "@/lib/types";
+import type { AgentStatus, BudgetUsage, UsageMetrics } from "@/lib/types";
 
 export function useDashboardData() {
-  return useQuery<DashboardData>({
+  return useQuery<UsageMetrics>({
     queryKey: ["dashboard"],
-    queryFn: () => api.get<DashboardData>("/usage/metrics"),
+    queryFn: () => api.get<UsageMetrics>("/usage/metrics"),
     refetchInterval: 15000,
   });
 }
