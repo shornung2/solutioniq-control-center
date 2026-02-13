@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 export function useConnectionStatus() {
   const { data: isConnected = false } = useQuery({
     queryKey: ["connection-status"],
-    queryFn: api.healthCheck,
+    queryFn: api.healthCheck, // now uses /agent/status
     refetchInterval: 10000,
     retry: false,
   });

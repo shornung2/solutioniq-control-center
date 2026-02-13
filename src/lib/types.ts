@@ -31,7 +31,19 @@ export interface Task {
   status: TaskStatus;
   created: string;
   duration: string;
+  priority?: number;
   output?: string;
+}
+
+export interface TaskTrace {
+  steps: TraceStep[];
+}
+
+export interface TraceStep {
+  step: number;
+  action: string;
+  result: string;
+  timestamp: string;
 }
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
@@ -49,4 +61,19 @@ export interface ChatMessage {
   role: "user" | "agent";
   text: string;
   time: string;
+}
+
+export interface AgentStatus {
+  status: "active" | "paused" | "busy";
+}
+
+export interface BudgetUsage {
+  used: number;
+  limit: number;
+}
+
+export interface Capability {
+  name: string;
+  enabled: boolean;
+  description?: string;
 }

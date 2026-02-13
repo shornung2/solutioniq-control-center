@@ -30,7 +30,7 @@ export const api = {
     try {
       const { error } = await supabase.functions.invoke("api-proxy", {
         headers: {
-          "x-target-path": "/health",
+          "x-target-path": "/agent/status",
           "x-target-method": "GET",
         },
       });
