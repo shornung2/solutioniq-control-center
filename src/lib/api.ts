@@ -1,25 +1,22 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws/stream";
+import { supabase } from "@/integrations/supabase/client";
 
-const getApiKey = () => localStorage.getItem("solutioniq_api_key") || "";
+const API_URL = import.meta.env.VITE_API_URL || "https://solutioniq.cloud/api/v1";
+const WS_URL = import.meta.env.VITE_WS_URL || "wss://solutioniq.cloud/api/v1/ws/stream";
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const apiKey = getApiKey();
-
-  const res = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
+  const { data, error } = await supabase.functions.invoke("api-proxy", {
     headers: {
-      "Content-Type": "application/json",
-      ...(apiKey ? { "X-API-Key": apiKey } : {}),
-      ...options.headers,
+      "x-target-path": endpoint,
+      "x-target-method": options.method || "GET",
     },
+    body: options.body ? JSON.parse(options.body as string) : undefined,
   });
 
-  if (!res.ok) {
-    throw new Error(`API Error: ${res.status} ${res.statusText}`);
+  if (error) {
+    throw new Error(`API Error: ${error.message}`);
   }
 
-  return res.json();
+  return data as T;
 }
 
 export const api = {
@@ -31,8 +28,13 @@ export const api = {
   delete: <T>(endpoint: string) => request<T>(endpoint, { method: "DELETE" }),
   healthCheck: async (): Promise<boolean> => {
     try {
-      const res = await fetch(`${API_URL}/health`, { signal: AbortSignal.timeout(5000) });
-      return res.ok;
+      const { error } = await supabase.functions.invoke("api-proxy", {
+        headers: {
+          "x-target-path": "/health",
+          "x-target-method": "GET",
+        },
+      });
+      return !error;
     } catch {
       return false;
     }
@@ -40,9 +42,7 @@ export const api = {
 };
 
 export function createWebSocket(onMessage: (data: unknown) => void, onError?: (err: Event) => void) {
-  const apiKey = getApiKey();
-  const url = apiKey ? `${WS_URL}?api_key=${apiKey}` : WS_URL;
-  const ws = new WebSocket(url);
+  const ws = new WebSocket(WS_URL);
 
   ws.onmessage = (event) => {
     try {
