@@ -65,11 +65,32 @@ export interface ChatMessage {
 
 export interface AgentStatus {
   status: "active" | "paused" | "busy";
+  active_task_count?: number;
+  pending_approval_count?: number;
+  deployment_name?: string;
+  uptime_seconds?: number;
+  last_heartbeat?: string;
+  deployment_id?: string;
 }
 
 export interface BudgetUsage {
-  used: number;
-  limit: number;
+  daily_used: number;
+  daily_limit: number;
+  daily_pct: number;
+  monthly_used: number;
+  monthly_limit: number;
+  monthly_pct: number;
+  hard_stop_enabled: boolean;
+  is_paused: boolean;
+}
+
+export interface UsageMetrics {
+  tasks_completed_24h: number;
+  tasks_failed_24h: number;
+  approval_queue_depth: number;
+  avg_response_ms: number;
+  error_rate: number;
+  uptime_pct: number;
 }
 
 export interface Capability {
