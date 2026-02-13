@@ -1,80 +1,55 @@
 
 
-## Fix API Endpoints to Match Antigravity Backend
+# Fix Chat and Tasks API Response Mapping
 
-### Problem
-All API calls are returning 404 because the frontend endpoints don't match your actual backend API. The proxy edge function is working correctly — it's the backend that's returning "Not Found" because the paths are wrong.
+## Problem
+The Chat page shows "No messages yet" after sending because the frontend code doesn't match the actual API response structure. Three specific mismatches exist:
 
-### Endpoint Mapping (Current vs Correct)
+1. The API wraps task lists in `{"tasks": [...], "total": N}` but the code expects a flat array
+2. Field names differ: the API uses `task_type`, `title`, `result`, `created_at` while the code expects `type`, `input`/`name`, `output`, `created`
+3. The chat filter checks `t.type === "chat"` but the API always returns `task_type: "general"`
 
-| Feature | Current Path | Correct Path |
-|---------|-------------|--------------|
-| Dashboard metrics | `/dashboard/metrics` | `/usage/metrics` |
-| Health check | `/health` | `/agent/status` (or keep `/health` if it exists) |
-| Tasks list | `/tasks` | `/tasks?limit=20` |
-| Chat send | `/chat` | `/tasks` (with `type="chat"`) |
-| Chat messages | `/chat/messages` | Poll task updates or use WebSocket |
-| Pending approvals | `/approvals/pending` | `/approvals` (filter client-side) |
-| Completed approvals | `/approvals/completed` | `/approvals` (filter client-side) |
-| Approve action | `/approvals/{id}/approve` | `/approvals/{id}/approve` (correct) |
-| Reject action | `/approvals/{id}/reject` | `/approvals/{id}/reject` (correct) |
+## Changes
 
-### Additional Features to Add
-Based on the Antigravity docs, the dashboard should also include:
-- **Agent Status** display (Active/Paused/Busy) with Pause/Resume buttons via `GET /agent/status`, `POST /agent/pause`, `POST /agent/resume`
-- **Token/Budget Usage** progress bar via `GET /usage/budget`
-- **Task creation** form via `POST /tasks`
-- **Task trace/detail** view via `GET /tasks/{id}/trace`
-- **Capabilities manager** in Settings via `GET /capabilities`
-- **WebSocket authentication** — send token as first message after connecting
+### 1. Update `src/lib/types.ts`
+- Add a `TaskListResponse` wrapper type: `{ tasks: Task[]; total: number; page: number; page_size: number }`
+- Update the `Task` interface fields to match the API: rename `name` to `title`, `output` to `result`, `created` to `created_at`, `duration` to `tokens_used`, add `task_type`, `description`, `error`, `source_channel`, etc.
 
-### Changes Required
+### 2. Fix `src/hooks/use-chat.ts`
+- Parse the wrapped response: extract `.tasks` from the API result
+- Update field references: use `t.title` for user message text, `t.result` for agent response, `t.created_at` for timestamps
+- Fix the filter: match on `chatTaskIds` (tasks created from chat) instead of a non-existent `type` field
+- Use the correct post body field mapping since the API ignores `type` and stores it as `task_type: "general"`
 
-#### 1. Update `src/hooks/use-dashboard.ts`
-- Change endpoint from `/dashboard/metrics` to `/usage/metrics`
-- Add new query for `/usage/budget` (token usage)
-- Add new query for `/agent/status` (agent status display)
+### 3. Fix `src/hooks/use-tasks.ts`
+- Unwrap the `{ tasks: [...] }` response in `useTasks` so the rest of the app receives a flat `Task[]` array
 
-#### 2. Update `src/pages/Dashboard.tsx`
-- Add Agent Status card with Pause/Resume buttons
-- Add Token Usage progress bar from budget endpoint
-- Wire up Quick Action buttons to actual API calls
+### 4. Clean up `supabase/functions/api-proxy/index.ts`
+- Remove the diagnostic `console.log` line that prints token metadata on every request
 
-#### 3. Update `src/hooks/use-tasks.ts`
-- Add `limit=20` default parameter
-- Add mutation for creating tasks via `POST /tasks`
-- Add query for task trace via `GET /tasks/{id}/trace`
+## Technical Details
 
-#### 4. Update `src/pages/Tasks.tsx`
-- Add "Create Task" button with modal form (title + priority slider)
-- Update task detail dialog to show execution trace from `/tasks/{id}/trace`
+The actual API task object looks like:
+```text
+{
+  "id": "uuid",
+  "title": "Hi there",
+  "task_type": "general",
+  "status": "pending",
+  "result": null,
+  "created_at": "2026-02-13T21:27:57Z",
+  "tokens_used": 0,
+  ...
+}
+```
 
-#### 5. Update `src/hooks/use-chat.ts`
-- Change send to `POST /tasks` with `type: "chat"` instead of `/chat`
-- Replace message polling with WebSocket listener or task update polling
-
-#### 6. Update `src/hooks/use-approvals.ts`
-- Change both pending/completed to use `GET /approvals` and filter by status client-side
-
-#### 7. Update `src/hooks/use-connection-status.ts`
-- Change health check to use `/agent/status` endpoint
-
-#### 8. Update `src/lib/types.ts`
-- Add types for agent status, budget usage, capabilities, and task trace
-- Update Task type to include `priority` field
-
-#### 9. Update `src/lib/api.ts`
-- Add WebSocket authentication (send token as first message after connection)
-- Note: WS token injection needs the edge function approach or direct connection
-
-#### 10. Update `src/pages/Settings.tsx`
-- Add Capabilities Manager section showing enabled/disabled capabilities from `GET /capabilities`
-
-### Technical Details
-
-The WebSocket connection requires special handling: per the Antigravity docs, after connecting you must send the token as the first message (`ws.send(JSON.stringify({ token }))`). Since the token is stored as a secret, the WebSocket connection will need to either:
-- Go through a separate edge function that establishes a server-side WS connection (complex), or
-- Use polling as a fallback for real-time updates via `GET /tasks/{id}`
-
-For the initial fix, polling will be used for chat updates, with WebSocket support added later.
+The tasks list endpoint returns:
+```text
+{
+  "tasks": [ ...task objects... ],
+  "total": 2,
+  "page": 1,
+  "page_size": 20
+}
+```
 
