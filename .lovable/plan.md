@@ -1,55 +1,36 @@
 
 
-# Fix Chat and Tasks API Response Mapping
+# Fix Chat Message Persistence and Display
 
 ## Problem
-The Chat page shows "No messages yet" after sending because the frontend code doesn't match the actual API response structure. Three specific mismatches exist:
+The Chat page tracks which tasks belong to chat using in-memory React state (`useState`). This means:
+- Navigating away from Chat and back loses all message history
+- Even when tasks complete, messages won't appear if the page was refreshed
 
-1. The API wraps task lists in `{"tasks": [...], "total": N}` but the code expects a flat array
-2. Field names differ: the API uses `task_type`, `title`, `result`, `created_at` while the code expects `type`, `input`/`name`, `output`, `created`
-3. The chat filter checks `t.type === "chat"` but the API always returns `task_type: "general"`
+The bigger issue (VPS not processing tasks) is a backend problem outside this app's control, but we should still fix the frontend so it works correctly once tasks do get processed.
 
 ## Changes
 
-### 1. Update `src/lib/types.ts`
-- Add a `TaskListResponse` wrapper type: `{ tasks: Task[]; total: number; page: number; page_size: number }`
-- Update the `Task` interface fields to match the API: rename `name` to `title`, `output` to `result`, `created` to `created_at`, `duration` to `tokens_used`, add `task_type`, `description`, `error`, `source_channel`, etc.
+### 1. Update `src/hooks/use-chat.ts`
+Instead of tracking `chatTaskIds` in React state (which resets on navigation), change the approach to:
+- Fetch ALL tasks from the API (which it already does)
+- Display all tasks as chat messages regardless of tracking -- since the chat is the primary way users interact, showing all tasks as conversations makes sense
+- Map each task's `title` as the user message and `result` (when available) as the agent response
+- Sort messages chronologically by `created_at`
+- When sending a new message, immediately add an optimistic user message to the UI while the API call completes
 
-### 2. Fix `src/hooks/use-chat.ts`
-- Parse the wrapped response: extract `.tasks` from the API result
-- Update field references: use `t.title` for user message text, `t.result` for agent response, `t.created_at` for timestamps
-- Fix the filter: match on `chatTaskIds` (tasks created from chat) instead of a non-existent `type` field
-- Use the correct post body field mapping since the API ignores `type` and stores it as `task_type: "general"`
-
-### 3. Fix `src/hooks/use-tasks.ts`
-- Unwrap the `{ tasks: [...] }` response in `useTasks` so the rest of the app receives a flat `Task[]` array
-
-### 4. Clean up `supabase/functions/api-proxy/index.ts`
-- Remove the diagnostic `console.log` line that prints token metadata on every request
+### 2. Update `src/pages/Chat.tsx`
+- Show a "Pending..." indicator for tasks that have `status: "pending"` and no `result` yet, instead of showing nothing
+- This gives users feedback that their message was received but is waiting to be processed
 
 ## Technical Details
 
-The actual API task object looks like:
-```text
-{
-  "id": "uuid",
-  "title": "Hi there",
-  "task_type": "general",
-  "status": "pending",
-  "result": null,
-  "created_at": "2026-02-13T21:27:57Z",
-  "tokens_used": 0,
-  ...
-}
-```
+The updated chat hook will:
+- Remove the `chatTaskIds` state entirely
+- Query `/tasks?limit=20` and convert ALL returned tasks into chat messages
+- For each task: create a user message from `title`, and if `result` is non-null, create an agent response message
+- For pending tasks with no result, show a "Waiting for response..." indicator
+- Continue polling every 5 seconds to pick up completed tasks
 
-The tasks list endpoint returns:
-```text
-{
-  "tasks": [ ...task objects... ],
-  "total": 2,
-  "page": 1,
-  "page_size": 20
-}
-```
+The `sendMessage` mutation stays the same (POST to `/tasks`), but `onSuccess` just invalidates the query cache without needing to track IDs.
 
