@@ -1,16 +1,12 @@
-const getBaseUrl = () => {
-  return localStorage.getItem("solutioniq_api_url") || "http://localhost:8000";
-};
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws/stream";
 
-const getApiKey = () => {
-  return localStorage.getItem("solutioniq_api_key") || "";
-};
+const getApiKey = () => localStorage.getItem("solutioniq_api_key") || "";
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const baseUrl = getBaseUrl();
   const apiKey = getApiKey();
 
-  const res = await fetch(`${baseUrl}${endpoint}`, {
+  const res = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -35,11 +31,31 @@ export const api = {
   delete: <T>(endpoint: string) => request<T>(endpoint, { method: "DELETE" }),
   healthCheck: async (): Promise<boolean> => {
     try {
-      const baseUrl = getBaseUrl();
-      const res = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(`${API_URL}/health`, { signal: AbortSignal.timeout(5000) });
       return res.ok;
     } catch {
       return false;
     }
   },
 };
+
+export function createWebSocket(onMessage: (data: unknown) => void, onError?: (err: Event) => void) {
+  const apiKey = getApiKey();
+  const url = apiKey ? `${WS_URL}?api_key=${apiKey}` : WS_URL;
+  const ws = new WebSocket(url);
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage(data);
+    } catch {
+      onMessage(event.data);
+    }
+  };
+
+  ws.onerror = (err) => onError?.(err);
+
+  return ws;
+}
+
+export { API_URL, WS_URL };
