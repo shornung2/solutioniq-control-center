@@ -1,12 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { Task, TaskTrace } from "@/lib/types";
+import type { Task, TaskListResponse, TaskTrace } from "@/lib/types";
 
 export function useTasks(status?: string) {
   const endpoint = status && status !== "all" ? `/tasks?limit=20&status=${status}` : "/tasks?limit=20";
   return useQuery<Task[]>({
     queryKey: ["tasks", status],
-    queryFn: () => api.get<Task[]>(endpoint),
+    queryFn: async () => {
+      const res = await api.get<TaskListResponse>(endpoint);
+      return res.tasks || [];
+    },
     refetchInterval: 10000,
   });
 }

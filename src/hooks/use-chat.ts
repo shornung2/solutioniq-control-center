@@ -1,37 +1,35 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { ChatMessage, Task } from "@/lib/types";
+import type { ChatMessage, Task, TaskListResponse } from "@/lib/types";
 
 export function useChatMessages() {
   const queryClient = useQueryClient();
   const [chatTaskIds, setChatTaskIds] = useState<string[]>([]);
 
-  // Poll chat-type tasks for responses
   const { data: messages = [], isLoading } = useQuery<ChatMessage[]>({
     queryKey: ["chat", "messages"],
     queryFn: async () => {
-      // Get recent tasks that are chat type
-      const tasks = await api.get<Task[]>("/tasks?limit=20");
-      // Transform tasks into chat messages format
+      const res = await api.get<TaskListResponse>("/tasks?limit=20");
+      const tasks = res.tasks || [];
       return tasks
-        .filter((t: any) => t.type === "chat" || chatTaskIds.includes(t.id))
-        .flatMap((t: any) => {
+        .filter((t) => chatTaskIds.includes(t.id))
+        .flatMap((t) => {
           const msgs: ChatMessage[] = [];
-          if (t.input || t.name) {
+          if (t.title) {
             msgs.push({
               id: `${t.id}-user`,
               role: "user",
-              text: t.input || t.name,
-              time: t.created,
+              text: t.title,
+              time: t.created_at,
             });
           }
-          if (t.output) {
+          if (t.result) {
             msgs.push({
               id: `${t.id}-agent`,
               role: "agent",
-              text: t.output,
-              time: t.created,
+              text: t.result,
+              time: t.created_at,
             });
           }
           return msgs;
@@ -42,7 +40,7 @@ export function useChatMessages() {
 
   const sendMutation = useMutation({
     mutationFn: async (text: string) => {
-      const task = await api.post<Task>("/tasks", { title: text, type: "chat" });
+      const task = await api.post<Task>("/tasks", { title: text });
       return task;
     },
     onSuccess: (task) => {
