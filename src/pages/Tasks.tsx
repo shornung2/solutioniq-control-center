@@ -1,27 +1,14 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-
-interface Task {
-  id: string;
-  name: string;
-  status: "pending" | "running" | "completed" | "failed";
-  created: string;
-  duration: string;
-  output?: string;
-}
-
-const mockTasks: Task[] = [
-  { id: "T-001", name: "Analyze customer sentiment data", status: "completed", created: "2024-01-15 09:30", duration: "2m 14s", output: "Processed 1,240 records. Positive: 67%, Neutral: 22%, Negative: 11%." },
-  { id: "T-002", name: "Generate monthly sales report", status: "running", created: "2024-01-15 10:00", duration: "1m 03s" },
-  { id: "T-003", name: "Sync inventory with warehouse API", status: "pending", created: "2024-01-15 10:15", duration: "-" },
-  { id: "T-004", name: "Process payment batch #892", status: "failed", created: "2024-01-15 08:45", duration: "0m 32s", output: "Error: Gateway timeout after 30s." },
-  { id: "T-005", name: "Update CRM contact records", status: "completed", created: "2024-01-15 07:20", duration: "4m 51s", output: "Updated 342 contacts." },
-];
+import { Skeleton } from "@/components/ui/skeleton";
+import { AlertCircle } from "lucide-react";
+import { useTasks } from "@/hooks/use-tasks";
+import type { Task } from "@/lib/types";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   completed: "default",
@@ -33,8 +20,7 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "o
 export default function Tasks() {
   const [filter, setFilter] = useState("all");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-
-  const filtered = filter === "all" ? mockTasks : mockTasks.filter((t) => t.status === filter);
+  const { data: tasks = [], isLoading, isError, refetch } = useTasks(filter);
 
   return (
     <Layout>
@@ -57,38 +43,54 @@ export default function Tasks() {
 
         <Card>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-muted-foreground">
-                    <th className="text-left p-3 font-medium">ID</th>
-                    <th className="text-left p-3 font-medium">Task</th>
-                    <th className="text-left p-3 font-medium">Status</th>
-                    <th className="text-left p-3 font-medium">Created</th>
-                    <th className="text-left p-3 font-medium">Duration</th>
-                    <th className="p-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((task) => (
-                    <tr key={task.id} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="p-3 font-mono text-xs text-muted-foreground">{task.id}</td>
-                      <td className="p-3">{task.name}</td>
-                      <td className="p-3">
-                        <Badge variant={statusVariant[task.status]}>{task.status}</Badge>
-                      </td>
-                      <td className="p-3 text-muted-foreground">{task.created}</td>
-                      <td className="p-3 text-muted-foreground">{task.duration}</td>
-                      <td className="p-3">
-                        <Button size="sm" variant="ghost" onClick={() => setSelectedTask(task)}>
-                          View
-                        </Button>
-                      </td>
+            {isLoading ? (
+              <div className="p-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : isError ? (
+              <div className="p-4 flex items-center gap-3 text-destructive">
+                <AlertCircle className="h-5 w-5" />
+                <span className="text-sm">Failed to load tasks</span>
+                <Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button>
+              </div>
+            ) : tasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-10">No tasks found</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground">
+                      <th className="text-left p-3 font-medium">ID</th>
+                      <th className="text-left p-3 font-medium">Task</th>
+                      <th className="text-left p-3 font-medium">Status</th>
+                      <th className="text-left p-3 font-medium">Created</th>
+                      <th className="text-left p-3 font-medium">Duration</th>
+                      <th className="p-3"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {tasks.map((task) => (
+                      <tr key={task.id} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
+                        <td className="p-3 font-mono text-xs text-muted-foreground">{task.id}</td>
+                        <td className="p-3">{task.name}</td>
+                        <td className="p-3">
+                          <Badge variant={statusVariant[task.status]}>{task.status}</Badge>
+                        </td>
+                        <td className="p-3 text-muted-foreground">{task.created}</td>
+                        <td className="p-3 text-muted-foreground">{task.duration}</td>
+                        <td className="p-3">
+                          <Button size="sm" variant="ghost" onClick={() => setSelectedTask(task)}>
+                            View
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
 
