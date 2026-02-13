@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -12,12 +11,10 @@ import { useConnectionStatus } from "@/hooks/use-connection-status";
 export default function SettingsPage() {
   const { toast } = useToast();
   const isConnected = useConnectionStatus();
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("solutioniq_api_key") || "");
   const [notifications, setNotifications] = useState(true);
 
   const save = () => {
-    localStorage.setItem("solutioniq_api_key", apiKey);
-    toast({ title: "Settings saved", description: "Your API key has been updated." });
+    toast({ title: "Settings saved", description: "Your preferences have been updated." });
   };
 
   return (
@@ -42,10 +39,7 @@ export default function SettingsPage() {
               <span className={`h-2 w-2 rounded-full ${isConnected ? "bg-green-500" : "bg-destructive"}`} />
               <span className="text-sm text-muted-foreground">{isConnected ? "Connected" : "Disconnected"}</span>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="api-key">API Key</Label>
-              <Input id="api-key" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Enter your API key" />
-            </div>
+            <p className="text-xs text-muted-foreground">Authentication is managed securely via encrypted secrets.</p>
           </CardContent>
         </Card>
 
