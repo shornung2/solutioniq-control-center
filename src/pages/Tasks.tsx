@@ -99,13 +99,13 @@ export default function Tasks() {
                     {tasks.map((task) => (
                       <tr key={task.id} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
                         <td className="p-3 font-mono text-xs text-muted-foreground">{task.id}</td>
-                        <td className="p-3">{task.name}</td>
+                        <td className="p-3">{task.title}</td>
                         <td className="p-3">
                           <Badge variant={statusVariant[task.status]}>{task.status}</Badge>
                         </td>
                         <td className="p-3 text-muted-foreground">{task.priority ?? "—"}</td>
-                        <td className="p-3 text-muted-foreground">{task.created}</td>
-                        <td className="p-3 text-muted-foreground">{task.duration}</td>
+                        <td className="p-3 text-muted-foreground">{task.created_at}</td>
+                        <td className="p-3 text-muted-foreground">{task.tokens_used}</td>
                         <td className="p-3">
                           <Button size="sm" variant="ghost" onClick={() => setSelectedTask(task)}>
                             View
@@ -124,7 +124,7 @@ export default function Tasks() {
         <Dialog open={!!selectedTask} onOpenChange={() => setSelectedTask(null)}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle className="font-heading">{selectedTask?.name}</DialogTitle>
+              <DialogTitle className="font-heading">{selectedTask?.title}</DialogTitle>
               <DialogDescription>Task {selectedTask?.id}</DialogDescription>
             </DialogHeader>
             <div className="space-y-3 text-sm">
@@ -138,16 +138,16 @@ export default function Tasks() {
               </div>
               <div className="flex gap-2">
                 <span className="text-muted-foreground">Created:</span>
-                <span>{selectedTask?.created}</span>
+                <span>{selectedTask?.created_at}</span>
               </div>
               <div className="flex gap-2">
-                <span className="text-muted-foreground">Duration:</span>
-                <span>{selectedTask?.duration}</span>
+                <span className="text-muted-foreground">Tokens:</span>
+                <span>{selectedTask?.tokens_used}</span>
               </div>
-              {selectedTask?.output && (
+              {selectedTask?.result && (
                 <div>
-                  <span className="text-muted-foreground">Output:</span>
-                  <pre className="mt-1 p-3 rounded bg-muted text-xs whitespace-pre-wrap">{selectedTask.output}</pre>
+                  <span className="text-muted-foreground">Result:</span>
+                  <pre className="mt-1 p-3 rounded bg-muted text-xs whitespace-pre-wrap">{selectedTask.result}</pre>
                 </div>
               )}
 

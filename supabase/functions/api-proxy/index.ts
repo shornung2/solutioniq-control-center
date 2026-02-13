@@ -15,7 +15,6 @@ serve(async (req) => {
 
   try {
     const accessToken = Deno.env.get("SOLUTIONIQ_ACCESS_TOKEN");
-    console.log("Token exists:", !!accessToken, "Length:", accessToken?.length || 0, "First 4 chars:", accessToken?.substring(0, 4) || "N/A");
     if (!accessToken) {
       return new Response(
         JSON.stringify({ error: "Access token not configured" }),

@@ -27,12 +27,23 @@ export type TaskStatus = "pending" | "running" | "completed" | "failed";
 
 export interface Task {
   id: string;
-  name: string;
+  title: string;
+  task_type: string;
   status: TaskStatus;
-  created: string;
-  duration: string;
+  created_at: string;
+  tokens_used: number;
   priority?: number;
-  output?: string;
+  result?: string | null;
+  description?: string;
+  error?: string | null;
+  source_channel?: string;
+}
+
+export interface TaskListResponse {
+  tasks: Task[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface TaskTrace {
