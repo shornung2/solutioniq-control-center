@@ -1,62 +1,80 @@
 
-## Secure Access Token Integration with Bearer Authentication
 
-### Overview
-You have a private access token that needs to be stored securely and used for API authentication. Your project has access to Lovable's secret management system. We'll store the token as an encrypted secret and inject it into all API requests using the standard OAuth2 `Authorization: Bearer <token>` header format.
+## Fix API Endpoints to Match Antigravity Backend
 
-### Current State
-- API client (`src/lib/api.ts`) currently uses localStorage for API key storage and sends it via `X-API-Key` header
-- The `.env.local` file has the API URLs set up correctly
-- No access token is currently configured
+### Problem
+All API calls are returning 404 because the frontend endpoints don't match your actual backend API. The proxy edge function is working correctly — it's the backend that's returning "Not Found" because the paths are wrong.
 
-### Implementation Plan
+### Endpoint Mapping (Current vs Correct)
 
-#### 1. **Store Access Token as a Secret**
-- Use Lovable's secret management system to store your access token securely
-- The token will be encrypted and never exposed in the codebase or `.env` files
-- Only the backend/edge functions and API layer will have access to it
+| Feature | Current Path | Correct Path |
+|---------|-------------|--------------|
+| Dashboard metrics | `/dashboard/metrics` | `/usage/metrics` |
+| Health check | `/health` | `/agent/status` (or keep `/health` if it exists) |
+| Tasks list | `/tasks` | `/tasks?limit=20` |
+| Chat send | `/chat` | `/tasks` (with `type="chat"`) |
+| Chat messages | `/chat/messages` | Poll task updates or use WebSocket |
+| Pending approvals | `/approvals/pending` | `/approvals` (filter client-side) |
+| Completed approvals | `/approvals/completed` | `/approvals` (filter client-side) |
+| Approve action | `/approvals/{id}/approve` | `/approvals/{id}/approve` (correct) |
+| Reject action | `/approvals/{id}/reject` | `/approvals/{id}/reject` (correct) |
 
-#### 2. **Update API Service** (`src/lib/api.ts`)
-- Replace the `X-API-Key` header approach with `Authorization: Bearer <token>` format
-- Update `getApiKey()` function to fetch the secret from the secure vault instead of localStorage
-- Modify the `request()` function to use the `Authorization` header
-- Update `createWebSocket()` to pass the token as a query parameter (or header if supported by your backend)
-- Remove localStorage references for API key
+### Additional Features to Add
+Based on the Antigravity docs, the dashboard should also include:
+- **Agent Status** display (Active/Paused/Busy) with Pause/Resume buttons via `GET /agent/status`, `POST /agent/pause`, `POST /agent/resume`
+- **Token/Budget Usage** progress bar via `GET /usage/budget`
+- **Task creation** form via `POST /tasks`
+- **Task trace/detail** view via `GET /tasks/{id}/trace`
+- **Capabilities manager** in Settings via `GET /capabilities`
+- **WebSocket authentication** — send token as first message after connecting
 
-#### 3. **Remove User-Facing API Key Configuration**
-- Update `src/pages/Settings.tsx` to remove the API Key input field since it's now managed as a secure secret
+### Changes Required
 
-### Technical Flow
-```
-Request Flow:
-User Action
-    ↓
-React Component
-    ↓
-API Method (api.get/post/put/delete)
-    ↓
-request() function
-    ↓
-Fetch Authorization Header: Bearer <SECURE_TOKEN>
-    ↓
-solutioniq.cloud/api/v1/...
-```
+#### 1. Update `src/hooks/use-dashboard.ts`
+- Change endpoint from `/dashboard/metrics` to `/usage/metrics`
+- Add new query for `/usage/budget` (token usage)
+- Add new query for `/agent/status` (agent status display)
 
-### Files to Modify
-1. `src/lib/api.ts` - Update to use `Authorization: Bearer` header and remove localStorage logic
-2. `src/pages/Settings.tsx` - Remove API key input field since token is now a secure secret
+#### 2. Update `src/pages/Dashboard.tsx`
+- Add Agent Status card with Pause/Resume buttons
+- Add Token Usage progress bar from budget endpoint
+- Wire up Quick Action buttons to actual API calls
 
-### Files NOT Modifying
-- `.env.local` - Already has correct API URLs (VITE_API_URL, VITE_WS_URL)
-- Other hooks/pages - They will automatically work with the updated API service
+#### 3. Update `src/hooks/use-tasks.ts`
+- Add `limit=20` default parameter
+- Add mutation for creating tasks via `POST /tasks`
+- Add query for task trace via `GET /tasks/{id}/trace`
 
-### Security Benefits
-- Token is never stored in localStorage (which is accessible to JavaScript)
-- Token is never committed to git or visible in source code
-- Token is encrypted at rest in the secret vault
-- Only the API layer has access to inject the token into requests
+#### 4. Update `src/pages/Tasks.tsx`
+- Add "Create Task" button with modal form (title + priority slider)
+- Update task detail dialog to show execution trace from `/tasks/{id}/trace`
 
-### Next Steps
-1. Approve this plan
-2. Provide your access token when prompted
-3. Verify that API calls are working with the bearer token authentication
+#### 5. Update `src/hooks/use-chat.ts`
+- Change send to `POST /tasks` with `type: "chat"` instead of `/chat`
+- Replace message polling with WebSocket listener or task update polling
+
+#### 6. Update `src/hooks/use-approvals.ts`
+- Change both pending/completed to use `GET /approvals` and filter by status client-side
+
+#### 7. Update `src/hooks/use-connection-status.ts`
+- Change health check to use `/agent/status` endpoint
+
+#### 8. Update `src/lib/types.ts`
+- Add types for agent status, budget usage, capabilities, and task trace
+- Update Task type to include `priority` field
+
+#### 9. Update `src/lib/api.ts`
+- Add WebSocket authentication (send token as first message after connection)
+- Note: WS token injection needs the edge function approach or direct connection
+
+#### 10. Update `src/pages/Settings.tsx`
+- Add Capabilities Manager section showing enabled/disabled capabilities from `GET /capabilities`
+
+### Technical Details
+
+The WebSocket connection requires special handling: per the Antigravity docs, after connecting you must send the token as the first message (`ws.send(JSON.stringify({ token }))`). Since the token is stored as a secret, the WebSocket connection will need to either:
+- Go through a separate edge function that establishes a server-side WS connection (complex), or
+- Use polling as a fallback for real-time updates via `GET /tasks/{id}`
+
+For the initial fix, polling will be used for chat updates, with WebSocket support added later.
+
