@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Send, Bot, User, Loader2 } from "lucide-react";
-import { useChatMessages } from "@/hooks/use-chat";
+import { useChatMessages, type ChatItem } from "@/hooks/use-chat";
 
 export default function Chat() {
   const { messages, isLoading, sendMessage, isSending } = useChatMessages();
@@ -48,16 +48,22 @@ export default function Chat() {
                     }`}
                   >
                     {msg.role === "agent" ? (
-                      <Bot className="h-4 w-4 text-primary" />
+                      msg.status ? (
+                        <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                      ) : (
+                        <Bot className="h-4 w-4 text-primary" />
+                      )
                     ) : (
                       <User className="h-4 w-4 text-secondary" />
                     )}
                   </div>
                   <div
                     className={`max-w-[75%] rounded-lg px-4 py-2 text-sm ${
-                      msg.role === "agent"
-                        ? "bg-muted text-foreground"
-                        : "bg-primary text-primary-foreground"
+                      msg.status
+                        ? "bg-muted text-muted-foreground italic"
+                        : msg.role === "agent"
+                          ? "bg-muted text-foreground"
+                          : "bg-primary text-primary-foreground"
                     }`}
                   >
                     <p>{msg.text}</p>
