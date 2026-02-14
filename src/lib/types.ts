@@ -152,17 +152,24 @@ export interface ConversationMessage {
 }
 
 export interface AnalyticsSummary {
-  today: { tasks: number; tokens: number; cost_usd: number; conversations: number };
-  month_to_date: { cost_usd: number };
+  period_start: string;
+  period_end: string;
+  total_tokens_in: number;
+  total_tokens_out: number;
+  total_cost_usd: number;
+  by_model: Record<string, { tokens_in: number; tokens_out: number; cost: number }>;
+  by_task_type: Record<string, any>;
 }
 
 export interface AnalyticsCosts {
-  total_cost_usd: number;
-  monthly_projected_usd: number;
-  budget_used_pct: number;
-  by_model: Array<{ model: string; cost: number; calls: number }>;
-  by_day: Array<{ date: string; cost: number; calls: number }>;
-  by_lane: Array<{ lane: string; cost: number; tasks: number }>;
+  daily_used: number;
+  daily_limit: number;
+  daily_pct: number;
+  monthly_used: number;
+  monthly_limit: number;
+  monthly_pct: number;
+  hard_stop_enabled: boolean;
+  is_paused: boolean;
 }
 
 export interface AnalyticsRouting {
@@ -195,12 +202,8 @@ export interface HealthDeep {
 
 export interface HealthDeepResponse {
   status: "healthy" | "degraded";
-  checks: {
-    database: { status: string; latency_ms: number };
-    redis: { status: string };
-    llm_providers: {
-      status: string;
-      circuits: Record<string, { state: string; available: boolean }>;
-    };
-  };
+  timestamp: string;
+  database: { status: string; latency_ms: number | null };
+  redis: { status: string; latency_ms: number | null };
+  llm_providers: Record<string, string>;
 }

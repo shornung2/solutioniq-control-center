@@ -1,22 +1,32 @@
-import { supabase } from "@/integrations/supabase/client";
-
 const API_URL = import.meta.env.VITE_API_URL || "https://solutioniq.cloud/api/v1";
 const WS_URL = import.meta.env.VITE_WS_URL || "wss://solutioniq.cloud/api/v1/ws/stream";
+const AUTH_TOKEN = import.meta.env.VITE_AUTH_TOKEN;
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const { data, error } = await supabase.functions.invoke("api-proxy", {
-    headers: {
-      "x-target-path": endpoint,
-      "x-target-method": options.method || "GET",
-    },
-    body: options.body ? JSON.parse(options.body as string) : undefined,
+  const url = `${API_URL}${endpoint}`;
+  const headers = {
+    "Content-Type": "application/json",
+    ...options.headers,
+    "Authorization": `Bearer ${AUTH_TOKEN}`,
+  };
+
+  const res = await fetch(url, {
+    ...options,
+    headers,
+    body: options.body,
   });
 
-  if (error) {
-    throw new Error(`API Error: ${error.message}`);
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`API Error ${res.status}: ${errorText}`);
   }
 
-  return data as T;
+  // Handle empty responses (like 204 No Content)
+  if (res.status === 204) {
+    return {} as T;
+  }
+
+  return res.json() as Promise<T>;
 }
 
 export const api = {
@@ -28,13 +38,8 @@ export const api = {
   delete: <T>(endpoint: string) => request<T>(endpoint, { method: "DELETE" }),
   healthCheck: async (): Promise<boolean> => {
     try {
-      const { error } = await supabase.functions.invoke("api-proxy", {
-        headers: {
-          "x-target-path": "/agent/status",
-          "x-target-method": "GET",
-        },
-      });
-      return !error;
+      await request("/agent/status");
+      return true;
     } catch {
       return false;
     }
@@ -43,6 +48,14 @@ export const api = {
 
 export function createWebSocket(onMessage: (data: unknown) => void, onError?: (err: Event) => void) {
   const ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    // Send auth token immediately upon connection if your backend expects it in the first message
+    // OR backend might use query param. 
+    // For now, standard auth header isn't supported in browser WebSocket API. 
+    // We'll rely on the handshake or first message.
+    ws.send(JSON.stringify({ type: "auth", token: AUTH_TOKEN }));
+  };
 
   ws.onmessage = (event) => {
     try {
@@ -59,36 +72,33 @@ export function createWebSocket(onMessage: (data: unknown) => void, onError?: (e
 }
 
 export async function downloadFile(fileId: string, filename: string) {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-  const res = await fetch(`${supabaseUrl}/functions/v1/api-proxy`, {
-    method: "POST",
+  // Basic download via link, assuming auth via cookie or query param if needed. 
+  // Implementing direct fetch download with auth header:
+  const url = `${API_URL}/files/${fileId}`;
+  const res = await fetch(url, {
     headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      "Content-Type": "application/json",
-      "x-target-path": `/files/${fileId}`,
-      "x-target-method": "GET",
-    },
+      "Authorization": `Bearer ${AUTH_TOKEN}`,
+    }
   });
 
   if (!res.ok) throw new Error("Download failed");
 
   const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
+  const objectUrl = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
+  a.href = objectUrl;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(objectUrl);
 }
 
+
 export function getFilePreviewUrl(fileId: string): string {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  return `${supabaseUrl}/functions/v1/api-proxy?file_id=${fileId}`;
+  // Check if we need a signed URL or can just pass the token in query (less secure) or assume session
+  // For now return direct link, user might need to handle auth
+  return `${API_URL}/files/${fileId}?token=${AUTH_TOKEN}`;
 }
 
 export { API_URL, WS_URL };
