@@ -19,6 +19,7 @@ import {
   Swords,
 } from "lucide-react";
 import { useChat, useConversations, type LocalMessage } from "@/hooks/use-chat";
+import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { formatDistanceToNow } from "date-fns";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -108,6 +109,7 @@ function MessageBubble({ msg }: { msg: LocalMessage }) {
 export default function Chat() {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const websocket = useWebSocketContext();
   const {
     messages,
     isLoading,
@@ -116,7 +118,7 @@ export default function Chat() {
     startNewConversation,
     sendMessage,
     isSending,
-  } = useChat();
+  } = useChat(websocket);
   const { data: conversations = [], isLoading: convsLoading } =
     useConversations();
 

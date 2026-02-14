@@ -8,6 +8,7 @@ import type {
   ConversationMessage,
   Task,
 } from "@/lib/types";
+import type { UseWebSocketReturn, WsTaskEvent } from "@/hooks/use-websocket";
 
 export interface LocalMessage {
   id: string;
@@ -39,21 +40,16 @@ export function useConversationMessages(conversationId: string | null) {
   });
 }
 
-export function useChat() {
+export function useChat(websocket?: UseWebSocketReturn) {
   const queryClient = useQueryClient();
-  const [activeConversationId, setActiveConversationId] = useState<
-    string | null
-  >(null);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const taskPlaceholderMap = useRef<Map<string, string>>(new Map());
 
-  // Load conversation messages when switching
   const conversationQuery = useConversationMessages(activeConversationId);
 
-  // Merge server messages with local optimistic ones
-  const serverMessages: LocalMessage[] = (
-    conversationQuery.data || []
-  ).map((m) => ({
+  const serverMessages: LocalMessage[] = (conversationQuery.data || []).map((m) => ({
     id: m.id,
     role: m.role,
     content: m.content,
@@ -63,7 +59,6 @@ export function useChat() {
     timestamp: m.timestamp,
   }));
 
-  // Only show local messages that aren't duplicates of server messages
   const serverIds = new Set(serverMessages.map((m) => m.id));
   const uniqueLocal = localMessages.filter((m) => !serverIds.has(m.id));
   const messages = [...serverMessages, ...uniqueLocal];
@@ -77,10 +72,52 @@ export function useChat() {
 
   useEffect(() => stopPolling, [stopPolling]);
 
+  // Handle WebSocket events for pending tasks
+  useEffect(() => {
+    if (!websocket?.lastEvent) return;
+    const evt: WsTaskEvent = websocket.lastEvent;
+    const placeholderId = taskPlaceholderMap.current.get(evt.task_id);
+    if (!placeholderId) return;
+
+    if (evt.type === "task.completed") {
+      setLocalMessages((prev) =>
+        prev.map((m) =>
+          m.id === placeholderId
+            ? {
+                ...m,
+                content: evt.result?.content || "Done.",
+                model: evt.result?.model,
+                cost_usd: evt.result?.cost_usd,
+                lane: evt.result?.model?.split("/").pop(),
+                status: undefined,
+              }
+            : m
+        )
+      );
+    } else if (evt.type === "task.failed") {
+      setLocalMessages((prev) =>
+        prev.map((m) =>
+          m.id === placeholderId
+            ? { ...m, content: "Something went wrong.", status: "error" }
+            : m
+        )
+      );
+    }
+
+    taskPlaceholderMap.current.delete(evt.task_id);
+    websocket.removePendingTask(evt.task_id);
+    queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    if (activeConversationId) {
+      queryClient.invalidateQueries({
+        queryKey: ["conversation-messages", activeConversationId],
+      });
+    }
+  }, [websocket?.lastEvent, websocket, queryClient, activeConversationId]);
+
   const pollForResult = useCallback(
     (taskId: string, placeholderId: string, conversationId: string) => {
       let attempts = 0;
-      const maxAttempts = 30; // 60 seconds
+      const maxAttempts = 30;
 
       pollingRef.current = setInterval(async () => {
         attempts++;
@@ -97,18 +134,13 @@ export function useChat() {
                         task.status === "completed"
                           ? task.result || "Done."
                           : task.error || "Something went wrong.",
-                      status:
-                        task.status === "failed" ? "error" : undefined,
+                      status: task.status === "failed" ? "error" : undefined,
                     }
                   : m
               )
             );
-            queryClient.invalidateQueries({
-              queryKey: ["conversation-messages", conversationId],
-            });
-            queryClient.invalidateQueries({
-              queryKey: ["conversations"],
-            });
+            queryClient.invalidateQueries({ queryKey: ["conversation-messages", conversationId] });
+            queryClient.invalidateQueries({ queryKey: ["conversations"] });
           }
         } catch {
           // keep polling
@@ -118,11 +150,7 @@ export function useChat() {
           setLocalMessages((prev) =>
             prev.map((m) =>
               m.id === placeholderId
-                ? {
-                    ...m,
-                    content: "Request timed out. Please try again.",
-                    status: "error",
-                  }
+                ? { ...m, content: "Request timed out. Please try again.", status: "error" }
                 : m
             )
           );
@@ -134,27 +162,14 @@ export function useChat() {
 
   const sendMutation = useMutation({
     mutationFn: async (text: string) => {
-      // Add optimistic user message
       const userMsgId = `local-user-${Date.now()}`;
       const assistantPlaceholderId = `local-assistant-${Date.now()}`;
       const now = new Date().toISOString();
 
       setLocalMessages((prev) => [
         ...prev,
-        {
-          id: userMsgId,
-          role: "user",
-          content: text,
-          timestamp: now,
-          status: "sending",
-        },
-        {
-          id: assistantPlaceholderId,
-          role: "assistant",
-          content: "",
-          timestamp: now,
-          status: "typing",
-        },
+        { id: userMsgId, role: "user", content: text, timestamp: now, status: "sending" },
+        { id: assistantPlaceholderId, role: "assistant", content: "", timestamp: now, status: "typing" },
       ]);
 
       try {
@@ -163,76 +178,46 @@ export function useChat() {
           conversation_id: activeConversationId,
         });
 
-        // Update conversation id
         if (!activeConversationId) {
           setActiveConversationId(res.conversation_id);
         }
 
-        // Remove sending status from user message
         setLocalMessages((prev) =>
-          prev.map((m) =>
-            m.id === userMsgId ? { ...m, status: undefined } : m
-          )
+          prev.map((m) => (m.id === userMsgId ? { ...m, status: undefined } : m))
         );
 
         if (res.status === "completed") {
           setLocalMessages((prev) =>
             prev.map((m) =>
               m.id === assistantPlaceholderId
-                ? {
-                    ...m,
-                    content: res.content || "Done.",
-                    lane: res.lane,
-                    model: res.model,
-                    cost_usd: res.cost_usd,
-                    status: undefined,
-                  }
+                ? { ...m, content: res.content || "Done.", lane: res.lane, model: res.model, cost_usd: res.cost_usd, status: undefined }
                 : m
             )
           );
-          queryClient.invalidateQueries({
-            queryKey: ["conversations"],
-          });
-          queryClient.invalidateQueries({
-            queryKey: [
-              "conversation-messages",
-              res.conversation_id,
-            ],
-          });
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          queryClient.invalidateQueries({ queryKey: ["conversation-messages", res.conversation_id] });
         } else if (res.status === "degraded") {
           setLocalMessages((prev) =>
             prev.map((m) =>
               m.id === assistantPlaceholderId
-                ? {
-                    ...m,
-                    content: res.content || "Response received.",
-                    lane: res.lane,
-                    model: res.model,
-                    cost_usd: res.cost_usd,
-                    status: "degraded",
-                  }
+                ? { ...m, content: res.content || "Response received.", lane: res.lane, model: res.model, cost_usd: res.cost_usd, status: "degraded" }
                 : m
             )
           );
-          queryClient.invalidateQueries({
-            queryKey: ["conversations"],
-          });
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
         } else if (res.status === "queued") {
-          pollForResult(
-            res.task_id,
-            assistantPlaceholderId,
-            res.conversation_id
-          );
+          // Use WebSocket if connected, otherwise poll
+          if (websocket?.isConnected) {
+            taskPlaceholderMap.current.set(res.task_id, assistantPlaceholderId);
+            websocket.registerPendingTask(res.task_id);
+          } else {
+            pollForResult(res.task_id, assistantPlaceholderId, res.conversation_id);
+          }
         } else {
-          // failed
           setLocalMessages((prev) =>
             prev.map((m) =>
               m.id === assistantPlaceholderId
-                ? {
-                    ...m,
-                    content: "Request failed. Please try again.",
-                    status: "error",
-                  }
+                ? { ...m, content: "Request failed. Please try again.", status: "error" }
                 : m
             )
           );
@@ -240,8 +225,7 @@ export function useChat() {
 
         return res;
       } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : String(err);
+        const message = err instanceof Error ? err.message : String(err);
         if (message.includes("429")) {
           toast.error("Rate limited. Please wait a moment.");
         } else {
@@ -250,11 +234,7 @@ export function useChat() {
         setLocalMessages((prev) =>
           prev
             .filter((m) => m.id !== assistantPlaceholderId)
-            .map((m) =>
-              m.id === userMsgId
-                ? { ...m, status: "error" }
-                : m
-            )
+            .map((m) => (m.id === userMsgId ? { ...m, status: "error" } : m))
         );
         throw err;
       }
@@ -265,6 +245,7 @@ export function useChat() {
     (id: string) => {
       stopPolling();
       setLocalMessages([]);
+      taskPlaceholderMap.current.clear();
       setActiveConversationId(id);
     },
     [stopPolling]
@@ -273,6 +254,7 @@ export function useChat() {
   const startNewConversation = useCallback(() => {
     stopPolling();
     setLocalMessages([]);
+    taskPlaceholderMap.current.clear();
     setActiveConversationId(null);
   }, [stopPolling]);
 
