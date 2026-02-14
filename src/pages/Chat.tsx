@@ -17,6 +17,7 @@ import {
   Search,
   Mail,
   Swords,
+  Trash2,
 } from "lucide-react";
 import { useChat, useConversations, type LocalMessage } from "@/hooks/use-chat";
 import { useWebSocketContext } from "@/contexts/WebSocketContext";
@@ -29,6 +30,16 @@ import { ImagePreviewDialog } from "@/components/ImagePreviewDialog";
 import { FeedbackStars } from "@/components/FeedbackStars";
 import { downloadFile } from "@/lib/api";
 import type { FileAttachment } from "@/lib/types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const STARTERS = [
   { text: "What can you help me with?", icon: Sparkles },
@@ -145,12 +156,14 @@ export default function Chat() {
     startNewConversation,
     sendMessage,
     isSending,
+    deleteConversation,
   } = useChat(websocket);
   const { data: conversations = [], isLoading: convsLoading } =
     useConversations();
 
   const [input, setInput] = useState("");
   const [previewFile, setPreviewFile] = useState<FileAttachment | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -240,17 +253,17 @@ export default function Chat() {
                 </p>
               ) : (
                 conversations.map((c) => (
-                  <button
+                  <div
                     key={c.id}
-                    onClick={() => {
-                      selectConversation(c.id);
-                      if (isMobile) setSidebarOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-3 hover:bg-sidebar-accent transition-colors ${
+                    className={`group relative w-full text-left px-3 py-3 hover:bg-sidebar-accent transition-colors cursor-pointer ${
                       activeConversationId === c.id
                         ? "bg-sidebar-accent border-l-2 border-primary"
                         : "border-l-2 border-transparent"
                     }`}
+                    onClick={() => {
+                      selectConversation(c.id);
+                      if (isMobile) setSidebarOpen(false);
+                    }}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-sm font-medium truncate flex-1">
@@ -258,19 +271,31 @@ export default function Chat() {
                           ? c.title.slice(0, 45) + "…"
                           : c.title}
                       </span>
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] shrink-0 bg-sidebar-accent text-sidebar-foreground"
-                      >
-                        {c.message_count}
-                      </Badge>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget(c.id);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/20"
+                          aria-label="Delete conversation"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </button>
+                        <Badge
+                          variant="secondary"
+                          className="text-[10px] bg-sidebar-accent text-sidebar-foreground"
+                        >
+                          {c.message_count}
+                        </Badge>
+                      </div>
                     </div>
                     <span className="text-[11px] text-sidebar-foreground/50">
                       {formatDistanceToNow(new Date(c.last_message_at), {
                         addSuffix: true,
                       })}
                     </span>
-                  </button>
+                  </div>
                 ))
               )}
             </div>
@@ -366,6 +391,30 @@ export default function Chat() {
         open={!!previewFile}
         onOpenChange={(open) => !open && setPreviewFile(null)}
       />
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this conversation and all its messages.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget) {
+                  deleteConversation(deleteTarget);
+                  setDeleteTarget(null);
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }
