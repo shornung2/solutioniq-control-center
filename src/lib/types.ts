@@ -159,6 +159,8 @@ export interface AnalyticsSummary {
   total_cost_usd: number;
   by_model: Record<string, { tokens_in: number; tokens_out: number; cost: number }>;
   by_task_type: Record<string, any>;
+  today?: { cost_usd: number; tasks: number };
+  month_to_date?: { cost_usd: number; tasks: number };
 }
 
 export interface AnalyticsCosts {
@@ -170,6 +172,10 @@ export interface AnalyticsCosts {
   monthly_pct: number;
   hard_stop_enabled: boolean;
   is_paused: boolean;
+  budget_used_pct?: number;
+  monthly_projected_usd?: number;
+  by_model?: Array<{ model: string; cost: number; tokens: number }>;
+  by_day?: Array<{ date: string; cost: number }>;
 }
 
 export interface AnalyticsRouting {
