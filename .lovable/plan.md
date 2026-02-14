@@ -1,38 +1,56 @@
 
-# Fix Status Dot Flickering
+# Fix: App Crash and API Authentication Failures
 
-## Root Cause
-The `useConnectionStatus` hook computes `status` from two unstable signals:
-1. `/health/deep` API response (stable once endpoints are live)
-2. WebSocket `isConnected` state (unstable -- connects, fails, reconnects with 1s+ backoff, causing rapid toggling)
+## Two Issues Found
 
-Every time the WebSocket toggles `isConnected`, the status recalculates: `healthy + ws=true` = "full" (green), then `healthy + ws=false` = "partial" (yellow), repeating every 1-2 seconds.
+### Issue 1: Chat page crashes -- WebSocket context used outside provider (CRITICAL)
 
-## Fix
+The `Chat` component calls `useWebSocketContext()` at the top of the component function (line 139), but `WebSocketProvider` only exists inside `<Layout>`, which renders later in Chat's return statement (line 197). React hooks run before the JSX renders, so the context is `null` and throws.
 
-### 1. `src/hooks/use-connection-status.ts`
-Decouple the status dot from WebSocket state. The health indicator should reflect the backend API health only:
-- `healthData.status === "healthy"` --> "full" (green)
-- `healthData.status === "degraded"` --> "partial" (yellow)  
-- `healthData === null` (fetch failed) --> "disconnected" (red)
+**The same pattern applies to all pages** -- every page component renders `<Layout>` inside its return, but the provider is inside Layout. Any page that uses `useWebSocketContext` directly will crash.
 
-Remove the `wsConnected` parameter entirely from the status calculation. The WebSocket is a streaming channel, not a health signal.
+**Fix:** Move `WebSocketProvider` from `Layout` up into `App.tsx`, wrapping all routes. This ensures the provider is available before any page component's hooks run.
 
-### 2. `src/components/Layout.tsx`
-Stop passing `wsConnected` to `useConnectionStatus` (simplify the call).
+**Files changed:**
+- `src/App.tsx` -- Wrap `BrowserRouter` (or its children) with `WebSocketProvider`
+- `src/components/Layout.tsx` -- Remove `WebSocketProvider` wrapper (keep `LayoutInner` as the default export pattern)
 
-### 3. `src/hooks/use-analytics.ts`
-The analytics hooks still have `refetchInterval: 30000` on the summary hook, which will keep polling a working endpoint. No change needed since `retry: false` and `staleTime: 25000` are already set.
+### Issue 2: API returning 401 "Invalid or expired token"
+
+Network logs show the backend function proxy returning `401 {"detail":"Invalid or expired token"}`. The edge function config has `verify_jwt = false`, so this is not a JWT issue on the edge function side. The 401 comes from the upstream VPS (`solutioniq.cloud`) rejecting the `SOLUTIONIQ_ACCESS_TOKEN`.
+
+**Fix:** Verify the `SOLUTIONIQ_ACCESS_TOKEN` secret is set and valid. If expired, it needs to be updated.
+
+**Files changed:** None (secret configuration only)
 
 ## Technical Details
 
-**Updated status logic:**
+**App.tsx change:**
 ```text
-healthData?.status === "healthy"  --> "full"
-healthData?.status === "degraded" --> "partial"
-healthData === null               --> "disconnected"
+import { WebSocketProvider } from "@/contexts/WebSocketContext";
+
+const App = () => (
+  <QueryClientProvider ...>
+    <TooltipProvider>
+      ...
+      <BrowserRouter>
+        <WebSocketProvider>
+          <Routes>...</Routes>
+        </WebSocketProvider>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
 ```
 
-**Files changed:**
-- `src/hooks/use-connection-status.ts` -- simplify status to depend only on health API
-- `src/components/Layout.tsx` -- remove wsConnected from useConnectionStatus call
+**Layout.tsx change:**
+Remove the `WebSocketProvider` wrapper and the import. The `Layout` function simply renders `LayoutInner` directly (no more two-component pattern needed for WebSocket).
+
+**Secret check:**
+Will verify `SOLUTIONIQ_ACCESS_TOKEN` is present in configured secrets. If missing or expired, will prompt for re-entry.
+
+## Sequence
+
+1. Move `WebSocketProvider` to `App.tsx` (fixes the crash)
+2. Simplify `Layout.tsx` (remove redundant provider)
+3. Check and fix the API token secret
