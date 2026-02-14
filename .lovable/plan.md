@@ -1,97 +1,88 @@
 
 
-# Create Files Page with Grid/List Views and Filtering
+# Enhanced Health Status + Onboarding Welcome
 
 ## Overview
-Add a new Files page that displays all generated documents and images, with grid/list view toggle and mime-type category filtering. Uses the existing `downloadFile` function and `FileAttachment` type from the codebase.
+Two additions: (1) replace the simple connection dot in the Header with a deep health check popover showing per-service status, and (2) show a one-time welcome dialog on first visit.
 
-## Changes
+## 1. Enhanced Health Status
 
-### 1. Create `src/pages/Files.tsx`
+### Update `src/hooks/use-connection-status.ts`
+- Replace the simple `api.healthCheck` boolean with a call to `api.get("/health/deep")` returning the full deep health response
+- Keep 30-second refetch interval
+- Derive overall status from the response's `status` field: "healthy" = "full", "degraded" = "partial", fetch failure = "disconnected"
+- Export the full health data (checks object) alongside the status
 
-New page using the `Layout` component, with the following structure:
+### Update `src/lib/types.ts`
+- Add a `HealthDeepResponse` interface:
+  - `status`: "healthy" | "degraded"
+  - `checks.database`: `{ status: string, latency_ms: number }`
+  - `checks.redis`: `{ status: string }`
+  - `checks.llm_providers`: `{ status: string, circuits: Record<string, { state: string, available: boolean }> }`
 
-**Data fetching:**
-- React Query hook inline: `useQuery({ queryKey: ["files"], queryFn: () => api.get<{ files: FileAttachment[] }>("/files") })`
+### Update `src/components/Header.tsx`
+- Import `Popover`, `PopoverTrigger`, `PopoverContent`
+- Make the status dot + label a clickable PopoverTrigger
+- Popover content shows:
+  - Overall status line: "All Systems Operational" (green) / "Degraded Performance" (yellow) / "Service Disruption" (red)
+  - Database row: status + latency (e.g., "Healthy . 3ms")
+  - Redis row: status
+  - LLM Providers section: each circuit (anthropic, google) with state badge -- "closed" = green "Normal", "open" = red "Tripped", "half_open" = yellow "Recovering"
+- Green dot pulses slowly when healthy (already has `status-pulse` class)
 
-**State:**
-- `view`: "grid" | "list" (default "grid")
-- `filter`: "all" | "documents" | "spreadsheets" | "presentations" | "images" (default "all")
+### Update `src/components/Layout.tsx`
+- Add a conditional yellow degraded banner between Header and main content
+- Banner text: "Some services are experiencing issues. Responses may be slower than usual."
+- Only shown when health status is "degraded"
+- Pass health status down from Layout or read from the same React Query cache
 
-**Top Bar:**
-- Page title "Files" on the left
-- View toggle: two icon buttons (LayoutGrid / List icons), highlighted when active
-- Filter buttons row: All | Documents | Spreadsheets | Presentations | Images
-  - Filter logic by mime_type:
-    - documents: `application/pdf` or `wordprocessingml`
-    - spreadsheets: `spreadsheetml`
-    - presentations: `presentationml`
-    - images: `image/*`
+Since Layout wraps the Header and both need the health data, the approach will be:
+- The `useConnectionStatus` hook returns the full health data
+- Layout calls the hook and passes relevant props to Header
+- Layout renders the degraded banner conditionally
 
-**Grid View (default):**
-- Responsive grid: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4`
-- Each card (Card component):
-  - Large file type icon at top (reuse icon logic from FileCard: PDF=red FileText, Word=blue FileText, Excel=green Table, PPT=orange Presentation, Image=purple ImageIcon)
-  - For image files: show thumbnail preview using `getFilePreviewUrl(file.file_id)` instead of the icon
-  - Filename (truncated, bold, small text)
-  - File size (muted, xs text) using the same `formatFileSize` helper
-  - Download button (outline, small) calling `downloadFile(file.file_id, file.filename)`
+## 2. Onboarding Welcome Dialog
 
-**List View:**
-- Table component with columns: Icon (small) | Filename | Type | Size | Download button
-- Compact rows
-- Type column: human-readable label derived from mime_type (e.g., "PDF", "Word Document", "Spreadsheet", "Image")
+### Create `src/components/WelcomeDialog.tsx`
+- Check `localStorage.getItem("solutioniq_onboarded")` on mount
+- If not set, show a Dialog (open by default)
+- Content:
+  - Title: "Welcome to SolutionIQ Autopilot"
+  - Subtitle: "Your AI-powered presales assistant"
+  - 2x2 grid of feature cards with icons:
+    - Search: "Research companies and competitors"
+    - Mail: "Draft emails and proposals"
+    - FileText: "Create documents and presentations"
+    - Zap: "Get proactive insights"
+  - "Get Started" button: sets `localStorage.setItem("solutioniq_onboarded", "true")` and closes dialog
+- Clean, minimal -- no skip button needed
 
-**Empty State:**
-- Centered: FolderOpen icon (48px, muted) + "No files yet" heading + "Ask Autopilot to create a document, spreadsheet, or presentation to get started." description
-
-**Loading State:**
-- Grid: 8 skeleton cards
-- List: 5 skeleton table rows
-
-**Error State:**
-- AlertCircle icon + "Failed to load files" + Retry button (matching Dashboard pattern)
-
-### 2. Update `src/components/AppSidebar.tsx`
-- Import `FolderOpen` from lucide-react
-- Add `{ title: "Files", url: "/files", icon: FolderOpen }` to `navItems` between Chat and Approvals (index 4)
-
-### 3. Update `src/App.tsx`
-- Import Files page
-- Add route: `<Route path="/files" element={<Files />} />`
+### Update `src/components/Layout.tsx`
+- Import and render `WelcomeDialog` inside the Layout so it appears on any page on first visit
 
 ## Technical Details
 
-**Mime-type filter mapping:**
-```text
-all -> no filter
-documents -> mime includes "pdf" or "wordprocessingml"
-spreadsheets -> mime includes "spreadsheetml"
-presentations -> mime includes "presentationml"
-images -> mime starts with "image/"
-```
+**Hook changes (`use-connection-status.ts`):**
+- `queryFn` changes from `api.healthCheck` to fetching `/health/deep`
+- Returns `{ status, healthData }` where `healthData` contains the full checks object
+- On fetch error, status falls back to "disconnected" with null healthData
 
-**Human-readable type labels:**
-```text
-application/pdf -> "PDF"
-*wordprocessingml* -> "Word Document"
-*spreadsheetml* -> "Spreadsheet"
-*presentationml* -> "Presentation"
-image/* -> "Image"
-default -> "File"
-```
+**Layout prop threading:**
+- Layout calls `useConnectionStatus(wsConnected)` (moved from Header)
+- Passes `{ status, healthData, theme, toggleTheme }` to Header
+- Renders degraded banner between Header and `<main>`
 
-**File size formatting** (same helper as FileCard):
+**Circuit state badge colors:**
 ```text
-< 1024 -> "X B"
-< 1024*1024 -> "X.X KB"
-else -> "X.X MB"
+closed -> green badge "Normal"
+open -> red badge "Tripped"  
+half_open -> yellow badge "Recovering"
 ```
-
-**Image thumbnail:** For image files in grid view, render an `<img>` tag with `src={getFilePreviewUrl(file.file_id)}` and `object-cover` styling, replacing the type icon.
 
 **Files changed:**
-- `src/pages/Files.tsx` -- new page
-- `src/components/AppSidebar.tsx` -- add nav item
-- `src/App.tsx` -- add route
+- `src/lib/types.ts` -- add HealthDeepResponse interface
+- `src/hooks/use-connection-status.ts` -- fetch /health/deep, return full data
+- `src/components/Header.tsx` -- popover with health details
+- `src/components/Layout.tsx` -- degraded banner + WelcomeDialog
+- `src/components/WelcomeDialog.tsx` -- new onboarding dialog
 
