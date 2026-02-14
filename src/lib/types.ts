@@ -192,3 +192,15 @@ export interface InstalledSkill {
 export interface HealthDeep {
   tools: Record<string, { available: boolean }>;
 }
+
+export interface HealthDeepResponse {
+  status: "healthy" | "degraded";
+  checks: {
+    database: { status: string; latency_ms: number };
+    redis: { status: string };
+    llm_providers: {
+      status: string;
+      circuits: Record<string, { state: string; available: boolean }>;
+    };
+  };
+}
