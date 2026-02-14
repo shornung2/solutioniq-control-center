@@ -109,3 +109,35 @@ export interface Capability {
   enabled: boolean;
   description?: string;
 }
+
+export interface ChatSendResponse {
+  content: string | null;
+  task_id: string;
+  conversation_id: string;
+  status: "completed" | "queued" | "failed" | "degraded";
+  lane: string;
+  model: string;
+  cost_usd: number;
+  tokens_used: number;
+  message_number: number;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  message_count: number;
+  total_cost_usd: number;
+  is_active: boolean;
+  created_at: string;
+  last_message_at: string;
+}
+
+export interface ConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  lane: string;
+  model: string;
+  cost_usd: number;
+  timestamp: string;
+}
