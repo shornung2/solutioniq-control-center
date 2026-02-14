@@ -21,6 +21,7 @@ export interface LocalMessage {
   timestamp: string;
   status?: "sending" | "typing" | "degraded" | "error";
   files?: FileAttachment[];
+  task_id?: string;
 }
 
 export function useConversations() {
@@ -93,6 +94,7 @@ export function useChat(websocket?: UseWebSocketReturn) {
                 lane: evt.result?.model?.split("/").pop(),
                 status: undefined,
                 files: (evt.result?.files as FileAttachment[]) || undefined,
+                task_id: evt.task_id,
               }
             : m
         )
@@ -148,6 +150,7 @@ export function useChat(websocket?: UseWebSocketReturn) {
                           : task.error || "Something went wrong.",
                       status: task.status === "failed" ? "error" : undefined,
                       files: taskFiles,
+                      task_id: taskId,
                     }
                   : m
               )
@@ -203,7 +206,7 @@ export function useChat(websocket?: UseWebSocketReturn) {
           setLocalMessages((prev) =>
             prev.map((m) =>
               m.id === assistantPlaceholderId
-                ? { ...m, content: res.content || "Done.", lane: res.lane, model: res.model, cost_usd: res.cost_usd, status: undefined, files: res.files }
+                ? { ...m, content: res.content || "Done.", lane: res.lane, model: res.model, cost_usd: res.cost_usd, status: undefined, files: res.files, task_id: res.task_id }
                 : m
             )
           );
@@ -213,7 +216,7 @@ export function useChat(websocket?: UseWebSocketReturn) {
           setLocalMessages((prev) =>
             prev.map((m) =>
               m.id === assistantPlaceholderId
-                ? { ...m, content: res.content || "Response received.", lane: res.lane, model: res.model, cost_usd: res.cost_usd, status: "degraded" }
+                ? { ...m, content: res.content || "Response received.", lane: res.lane, model: res.model, cost_usd: res.cost_usd, status: "degraded", task_id: res.task_id }
                 : m
             )
           );
