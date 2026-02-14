@@ -58,4 +58,37 @@ export function createWebSocket(onMessage: (data: unknown) => void, onError?: (e
   return ws;
 }
 
+export async function downloadFile(fileId: string, filename: string) {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/api-proxy`, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      "Content-Type": "application/json",
+      "x-target-path": `/files/${fileId}`,
+      "x-target-method": "GET",
+    },
+  });
+
+  if (!res.ok) throw new Error("Download failed");
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function getFilePreviewUrl(fileId: string): string {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  return `${supabaseUrl}/functions/v1/api-proxy?file_id=${fileId}`;
+}
+
 export { API_URL, WS_URL };
