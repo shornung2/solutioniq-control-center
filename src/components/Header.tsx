@@ -2,6 +2,7 @@ import { Moon, Sun, User } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { useConnectionStatus } from "@/hooks/use-connection-status";
+import { useWebSocketContext } from "@/contexts/WebSocketContext";
 
 interface HeaderProps {
   theme: "dark" | "light";
@@ -9,20 +10,31 @@ interface HeaderProps {
 }
 
 export function Header({ theme, toggleTheme }: HeaderProps) {
-  const isConnected = useConnectionStatus();
+  const { isConnected: wsConnected } = useWebSocketContext();
+  const { status } = useConnectionStatus(wsConnected);
+
+  const dotColor =
+    status === "full"
+      ? "bg-green-500 status-pulse"
+      : status === "partial"
+        ? "bg-yellow-500"
+        : "bg-destructive";
+
+  const label =
+    status === "full"
+      ? "Connected"
+      : status === "partial"
+        ? "Partial"
+        : "Disconnected";
 
   return (
     <header className="h-14 border-b border-border flex items-center justify-between px-4 bg-card">
       <div className="flex items-center gap-3">
         <SidebarTrigger />
         <div className="hidden sm:flex items-center gap-2">
-          <span
-            className={`h-2 w-2 rounded-full ${
-              isConnected ? "bg-green-500 status-pulse" : "bg-destructive"
-            }`}
-          />
+          <span className={`h-2 w-2 rounded-full ${dotColor}`} />
           <span className="text-xs text-muted-foreground font-body">
-            {isConnected ? "Connected" : "Disconnected"}
+            {label}
           </span>
         </div>
       </div>
