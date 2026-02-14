@@ -62,11 +62,8 @@ export function useChat(websocket?: UseWebSocketReturn) {
     timestamp: m.timestamp,
   }));
 
-  // Only keep local messages that are still in-flight (not yet confirmed by server)
-  const inFlightStatuses = new Set(["sending", "typing", "error", "degraded"]);
-  const uniqueLocal = localMessages.filter(
-    (m) => inFlightStatuses.has(m.status ?? "") || (m.task_id && !m.status)
-  );
+  const serverIds = new Set(serverMessages.map((m) => m.id));
+  const uniqueLocal = localMessages.filter((m) => !serverIds.has(m.id));
   const messages = [...serverMessages, ...uniqueLocal];
 
   const stopPolling = useCallback(() => {
@@ -90,15 +87,15 @@ export function useChat(websocket?: UseWebSocketReturn) {
         prev.map((m) =>
           m.id === placeholderId
             ? {
-                ...m,
-                content: evt.result?.content || "Done.",
-                model: evt.result?.model,
-                cost_usd: evt.result?.cost_usd,
-                lane: evt.result?.model?.split("/").pop(),
-                status: undefined,
-                files: (evt.result?.files as FileAttachment[]) || undefined,
-                task_id: evt.task_id,
-              }
+              ...m,
+              content: evt.result?.content || "Done.",
+              model: evt.result?.model,
+              cost_usd: evt.result?.cost_usd,
+              lane: evt.result?.model?.split("/").pop(),
+              status: undefined,
+              files: (evt.result?.files as FileAttachment[]) || undefined,
+              task_id: evt.task_id,
+            }
             : m
         )
       );
@@ -125,7 +122,7 @@ export function useChat(websocket?: UseWebSocketReturn) {
   const pollForResult = useCallback(
     (taskId: string, placeholderId: string, conversationId: string) => {
       let attempts = 0;
-      const maxAttempts = 60;
+      const maxAttempts = 30;
 
       pollingRef.current = setInterval(async () => {
         attempts++;
@@ -134,27 +131,37 @@ export function useChat(websocket?: UseWebSocketReturn) {
           if (task.status === "completed" || task.status === "failed") {
             stopPolling();
             let taskFiles: FileAttachment[] | undefined;
+            let content = "Done.";
+            let model: string | undefined;
+            let cost_usd: number | undefined;
+
             if (task.status === "completed" && task.result) {
               try {
-                const parsed = JSON.parse(task.result);
+                const parsed = typeof task.result === 'string' ? JSON.parse(task.result) : task.result;
+                content = parsed?.content || parsed?.source || task.result;
+                model = parsed?.model;
+                cost_usd = parsed?.cost_usd;
                 if (parsed?.files) taskFiles = parsed.files;
               } catch {
-                // result is plain text, no files
+                // result is plain text
+                content = task.result;
               }
+            } else if (task.status === "failed") {
+              content = task.error || "Something went wrong.";
             }
+
             setLocalMessages((prev) =>
               prev.map((m) =>
                 m.id === placeholderId
                   ? {
-                      ...m,
-                      content:
-                        task.status === "completed"
-                          ? task.result || "Done."
-                          : task.error || "Something went wrong.",
-                      status: task.status === "failed" ? "error" : undefined,
-                      files: taskFiles,
-                      task_id: taskId,
-                    }
+                    ...m,
+                    content,
+                    status: task.status === "failed" ? "error" : undefined,
+                    model,
+                    cost_usd,
+                    files: taskFiles,
+                    task_id: taskId,
+                  }
                   : m
               )
             );
