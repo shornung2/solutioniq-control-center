@@ -62,8 +62,11 @@ export function useChat(websocket?: UseWebSocketReturn) {
     timestamp: m.timestamp,
   }));
 
-  const serverIds = new Set(serverMessages.map((m) => m.id));
-  const uniqueLocal = localMessages.filter((m) => !serverIds.has(m.id));
+  // Only keep local messages that are still in-flight (not yet confirmed by server)
+  const inFlightStatuses = new Set(["sending", "typing", "error", "degraded"]);
+  const uniqueLocal = localMessages.filter(
+    (m) => inFlightStatuses.has(m.status ?? "") || (m.task_id && !m.status)
+  );
   const messages = [...serverMessages, ...uniqueLocal];
 
   const stopPolling = useCallback(() => {
@@ -274,6 +277,17 @@ export function useChat(websocket?: UseWebSocketReturn) {
     setActiveConversationId(null);
   }, [stopPolling]);
 
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      await api.delete(`/chat/conversations/${id}`);
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      if (activeConversationId === id) {
+        startNewConversation();
+      }
+    },
+    [queryClient, activeConversationId, startNewConversation]
+  );
+
   return {
     messages,
     isLoading: conversationQuery.isLoading && !!activeConversationId,
@@ -282,5 +296,6 @@ export function useChat(websocket?: UseWebSocketReturn) {
     startNewConversation,
     sendMessage: sendMutation.mutate,
     isSending: sendMutation.isPending,
+    deleteConversation,
   };
 }
