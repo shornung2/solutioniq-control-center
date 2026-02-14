@@ -403,10 +403,11 @@ export default function Chat() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (deleteTarget) {
-                  deleteConversation(deleteTarget);
-                  setDeleteTarget(null);
+              onClick={async () => {
+                const target = deleteTarget;
+                setDeleteTarget(null);
+                if (target) {
+                  await deleteConversation(target);
                 }
               }}
             >
