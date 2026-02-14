@@ -1,5 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL || "https://solutioniq.cloud/api/v1";
+
 const WS_URL = import.meta.env.VITE_WS_URL || "wss://solutioniq.cloud/api/v1/ws/stream";
+
 const AUTH_TOKEN = import.meta.env.VITE_AUTH_TOKEN;
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -7,7 +9,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const headers = {
     "Content-Type": "application/json",
     ...options.headers,
-    Authorization: `Bearer ${AUTH_TOKEN}`,
+    "Authorization": `Bearer ${AUTH_TOKEN}`,
   };
 
   const res = await fetch(url, {
@@ -30,10 +32,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
-  get: <T,>(endpoint: string) => request<T>(endpoint),
-  post: <T,>(endpoint: string, body: unknown) => request<T>(endpoint, { method: "POST", body: JSON.stringify(body) }),
-  put: <T,>(endpoint: string, body: unknown) => request<T>(endpoint, { method: "PUT", body: JSON.stringify(body) }),
-  delete: <T,>(endpoint: string) => request<T>(endpoint, { method: "DELETE" }),
+  get: <T>(endpoint: string) => request<T>(endpoint),
+  post: <T>(endpoint: string, body: unknown) =>
+    request<T>(endpoint, { method: "POST", body: JSON.stringify(body) }),
+  put: <T>(endpoint: string, body: unknown) =>
+    request<T>(endpoint, { method: "PUT", body: JSON.stringify(body) }),
+  delete: <T>(endpoint: string) => request<T>(endpoint, { method: "DELETE" }),
   healthCheck: async (): Promise<boolean> => {
     try {
       await request("/agent/status");
@@ -70,8 +74,8 @@ export async function downloadFile(fileId: string, filename: string) {
   const url = `${API_URL}/files/${fileId}`;
   const res = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${AUTH_TOKEN}`,
-    },
+      "Authorization": `Bearer ${AUTH_TOKEN}`,
+    }
   });
 
   if (!res.ok) throw new Error("Download failed");
