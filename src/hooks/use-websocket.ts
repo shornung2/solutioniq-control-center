@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { WS_URL } from "@/lib/api";
+import { WS_URL, AUTH_TOKEN } from "@/lib/api";
 
 import type { FileAttachment } from "@/lib/types";
 
@@ -41,7 +41,7 @@ export function useWebSocket(): UseWebSocketReturn {
       ws.onopen = () => {
         setIsConnected(true);
         backoffRef.current = 1000;
-        ws.send(JSON.stringify({ token: "stream" }));
+        ws.send(JSON.stringify({ type: "auth", token: AUTH_TOKEN }));
       };
 
       ws.onmessage = (event) => {
