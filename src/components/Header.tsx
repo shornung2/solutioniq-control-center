@@ -58,25 +58,25 @@ export function Header({ theme, toggleTheme, status, healthData }: HeaderProps) 
           <PopoverContent align="start" className="w-72 p-3 space-y-3">
             <p className={`text-sm font-semibold ${overallColor}`}>{overallLabel}</p>
 
-            {healthData?.checks && (
+            {healthData && (
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Database</span>
                   <span className="capitalize">
-                    {healthData.checks.database.status} · {healthData.checks.database.latency_ms}ms
+                    {healthData.database.status}{healthData.database.latency_ms != null ? ` · ${healthData.database.latency_ms}ms` : ''}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Redis</span>
-                  <span className="capitalize">{healthData.checks.redis.status}</span>
+                  <span className="capitalize">{healthData.redis.status}</span>
                 </div>
                 <div className="space-y-1.5">
                   <span className="text-muted-foreground">LLM Providers</span>
-                  {Object.entries(healthData.checks.llm_providers.circuits).map(
-                    ([name, circuit]) => (
+                  {Object.entries(healthData.llm_providers).map(
+                    ([name, status]) => (
                       <div key={name} className="flex justify-between items-center pl-2">
                         <span className="capitalize">{name}</span>
-                        {circuitBadge(circuit.state)}
+                        {circuitBadge(status === "operational" ? "closed" : "open")}
                       </div>
                     )
                   )}
