@@ -3,6 +3,7 @@ import {
   BarChart3,
   ListTodo,
   MessageSquare,
+  FolderOpen,
   ShieldCheck,
   Settings,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const navItems = [
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Tasks", url: "/tasks", icon: ListTodo },
   { title: "Chat", url: "/chat", icon: MessageSquare },
+  { title: "Files", url: "/files", icon: FolderOpen },
   { title: "Approvals", url: "/approvals", icon: ShieldCheck },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
