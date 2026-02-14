@@ -1,61 +1,95 @@
 
 
-# Add Star Rating Feedback to Assistant Messages
+# Create Analytics Page with Cost Tracking and Performance Metrics
 
 ## Overview
-Add a 5-star rating widget below each completed assistant message, with optional text feedback. Ratings are sent to the backend via `POST /chat/{task_id}/feedback`.
+Add a new Analytics page with cost tracking charts, model breakdowns, and routing performance metrics. Uses the existing API proxy pattern and Recharts (via shadcn chart components).
 
 ## Changes
 
-### 1. Add `task_id` to `LocalMessage` in `src/hooks/use-chat.ts`
-- Add optional `task_id?: string` field to the `LocalMessage` interface
-- When processing completed responses (sync): set `task_id` from `res.task_id`
-- When processing degraded responses: set `task_id` from `res.task_id`
-- When WebSocket delivers `task.completed`: set `task_id` from `evt.task_id`
-- When polling resolves a completed task: set `task_id` from the polled task id
-- This is needed so the `FeedbackStars` component knows which task to send feedback for
+### 1. Add analytics types to `src/lib/types.ts`
+New interfaces for the three analytics endpoints:
+- `AnalyticsSummary` -- today's stats and month-to-date
+- `AnalyticsCosts` -- total cost, projection, budget %, breakdowns by model/day/lane
+- `AnalyticsRouting` -- routing stats per lane with success rates and feedback ratings
 
-### 2. Create `src/components/FeedbackStars.tsx`
-New component with props: `taskId: string`
+### 2. Create `src/hooks/use-analytics.ts`
+Three React Query hooks following the existing pattern in `use-dashboard.ts`:
+- `useAnalyticsSummary()` -- calls `/analytics/summary`, refetches every 30s
+- `useAnalyticsCosts(days)` -- calls `/analytics/costs?days={days}`, accepts a `days` parameter (7, 30, 90)
+- `useAnalyticsRouting(days)` -- calls `/analytics/routing?days={days}`, same days parameter
 
-Internal state:
-- `hoveredStar: number | null` -- which star is being hovered (1-5)
-- `selectedStar: number | null` -- which star was clicked
-- `showThanks: boolean` -- show "Thanks!" text after rating
-- `showFeedbackInput: boolean` -- show text input for additional feedback
-- `feedbackText: string` -- the comment text
-- `submittingFeedback: boolean` -- loading state for comment submission
+### 3. Create `src/pages/Analytics.tsx`
+Full page using the `Layout` component, structured in three rows:
 
-Behavior:
-- Render 5 Star icons (16px, from lucide-react) in a row
-- Default: outlined/gray stars using `text-muted-foreground/40`
-- On hover: fill stars up to hovered position with primary/gold color
-- On click (first time): send `api.post("/chat/{taskId}/feedback", { rating })` immediately, show filled stars, display "Thanks!" text that fades after 2 seconds
-- On click (already rated): toggle inline text input with "Any additional feedback?" placeholder and a small "Submit" button
-- Submit button sends `api.post("/chat/{taskId}/feedback", { rating: selectedStar, comment: feedbackText })`
-- Entire row uses small, subtle styling: `text-muted-foreground text-xs`
+**Row 1 -- Stat Cards (4 cards, glow-orange class)**
+- "Today's Cost": `$X.XX` with `N tasks` subtitle (from summary endpoint)
+- "Month to Date": `$X.XX` (from summary)
+- "Monthly Projection": `$X.XX` (from costs endpoint)
+- "Budget Used": percentage with colored Progress bar (green/yellow/red thresholds)
 
-Star rendering logic:
-- If `selectedStar` is set: fill stars 1 through `selectedStar`, outline the rest
-- If hovering and no selection yet: fill stars 1 through `hoveredStar`, outline the rest
-- Use `Star` icon with `fill="currentColor"` for filled, no fill for outline
-- Filled color: `text-primary` (the orange accent)
-- Outline color: `text-muted-foreground/40`
+**Row 2 -- Cost Over Time (full-width Card)**
+- Period selector: 7d / 30d / 90d toggle buttons controlling the `days` state
+- Recharts AreaChart with gradient fill using the shadcn `ChartContainer` component
+- X-axis: dates, Y-axis: USD, tooltip with cost and call count
 
-### 3. Update `src/pages/Chat.tsx`
-- Import `FeedbackStars`
-- In `MessageBubble`: after the lane/cost pill (line ~126), add a conditional render:
-  - Only show if `!isUser && msg.task_id && msg.status !== "typing" && msg.status !== "sending"`
-  - Render `<FeedbackStars taskId={msg.task_id} />`
+**Row 3 -- Two side-by-side Cards**
+- Left: "Cost by Model" -- horizontal BarChart, color-coded (Haiku=green, Sonnet=blue, Opus=purple)
+- Right: "Routing Performance" -- Table with columns: Lane, Tasks, Success Rate (colored badge), Avg Rating (star icon + number)
+
+Loading states use Skeleton components (matching Dashboard pattern). Error states show AlertCircle with retry button.
+
+### 4. Update `src/components/AppSidebar.tsx`
+- Import `BarChart3` from lucide-react
+- Add `{ title: "Analytics", url: "/analytics", icon: BarChart3 }` to `navItems` array, positioned between Dashboard and Tasks (index 1)
+
+### 5. Update `src/App.tsx`
+- Import the new Analytics page
+- Add route: `<Route path="/analytics" element={<Analytics />} />`
 
 ## Technical Details
 
-**API call:** `api.post("/chat/{taskId}/feedback", { rating: 1-5, comment: "optional" })`
-- Fire-and-forget on initial rating (no need to block UI)
-- Show loading state only on comment submission
+**Type definitions for `src/lib/types.ts`:**
+```text
+AnalyticsSummary {
+  today: { tasks: number, tokens: number, cost_usd: number, conversations: number }
+  month_to_date: { cost_usd: number }
+}
+
+AnalyticsCosts {
+  total_cost_usd: number
+  monthly_projected_usd: number
+  budget_used_pct: number
+  by_model: Array<{ model: string, cost: number, calls: number }>
+  by_day: Array<{ date: string, cost: number, calls: number }>
+  by_lane: Array<{ lane: string, cost: number, tasks: number }>
+}
+
+AnalyticsRouting {
+  routing_stats: Array<{ lane: string, task_count: number, success_rate: number, avg_tokens: number }>
+  feedback_by_lane: Record<string, { avg_rating: number, count: number }>
+}
+```
+
+**Chart configuration:** Uses the existing `ChartContainer`, `ChartTooltip`, `ChartTooltipContent` from `src/components/ui/chart.tsx` with Recharts `AreaChart`, `Area`, `BarChart`, `Bar`, `XAxis`, `YAxis`, `CartesianGrid`.
+
+**Budget Progress bar color logic:**
+- `budget_used_pct < 50` -- green (`[&>div]:bg-green-500`)
+- `50-80` -- yellow (`[&>div]:bg-yellow-500`)
+- `>80` -- red (`[&>div]:bg-red-500`)
+
+**Model color mapping for bar chart:**
+```text
+haiku -> hsl(142, 71%, 45%) (green)
+sonnet -> hsl(217, 91%, 60%) (blue)
+opus -> hsl(271, 91%, 65%) (purple)
+default -> hsl(var(--primary))
+```
 
 **Files changed:**
-- `src/hooks/use-chat.ts` -- add `task_id` to `LocalMessage`, populate it in all response paths
-- `src/components/FeedbackStars.tsx` -- new component
-- `src/pages/Chat.tsx` -- integrate FeedbackStars into MessageBubble
+- `src/lib/types.ts` -- add 3 interfaces
+- `src/hooks/use-analytics.ts` -- new, 3 hooks
+- `src/pages/Analytics.tsx` -- new, full page
+- `src/components/AppSidebar.tsx` -- add nav item
+- `src/App.tsx` -- add route
 
