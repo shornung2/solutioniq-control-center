@@ -1,20 +1,29 @@
 
-# Update SOLUTIONIQ_ACCESS_TOKEN Secret
+
+# Fix Chat Message Timeout
 
 ## Problem
-The `SOLUTIONIQ_ACCESS_TOKEN` stored in the backend secrets is expired or invalid. All authenticated API calls to `solutioniq.cloud` return `401 Unauthorized` ("Invalid or expired token"), while unauthenticated endpoints like `/health/deep` work fine.
+Chat messages are sent successfully (POST /chat returns 200 with status "queued"), but the backend task stays permanently at "pending" status and never gets processed. The assistant response never arrives, and the app shows "Request timed out" after 60 seconds.
 
-## Solution
-1. Update the `SOLUTIONIQ_ACCESS_TOKEN` secret with a fresh, long-lived token
-2. Redeploy the `api-proxy` edge function to pick up the new secret
-3. Test the connection by calling `/agent/status` and `/chat/conversations` through the proxy
+## Root Cause
+The WebSocket in `use-websocket.ts` sends a hardcoded `{ token: "stream" }` for authentication, while `api.ts`'s `createWebSocket` correctly sends the real bearer token (`VITE_AUTH_TOKEN`). The server likely needs the real token to authenticate the WebSocket stream and associate it with the user/deployment, which may also trigger task processing.
 
-## Steps
-1. Prompt you to enter the new token value securely
-2. Save it as the `SOLUTIONIQ_ACCESS_TOKEN` secret
-3. Verify the proxy works by testing authenticated endpoints
+## Changes
+
+### 1. Fix WebSocket authentication in `use-websocket.ts`
+- Import `AUTH_TOKEN` from `api.ts` (need to export it first) or read from `import.meta.env.VITE_AUTH_TOKEN`
+- Change line 44 from: `ws.send(JSON.stringify({ token: "stream" }))` 
+- To: `ws.send(JSON.stringify({ type: "auth", token: AUTH_TOKEN }))` -- matching the pattern in `api.ts`'s `createWebSocket`
+
+### 2. Export AUTH_TOKEN from `api.ts`
+- The file already exports `API_URL` and `WS_URL` on line 94
+- Add `AUTH_TOKEN` to that export so `use-websocket.ts` can import it
+
+### 3. Increase polling timeout as safety net
+- In `use-chat.ts`, increase `maxAttempts` from 30 to 60 (2 minutes instead of 1 minute) to give the backend more time when polling is needed as a fallback
 
 ## Technical Details
-- The `api-proxy` edge function reads `SOLUTIONIQ_ACCESS_TOKEN` via `Deno.env.get("SOLUTIONIQ_ACCESS_TOKEN")`
-- The token is sent as `Authorization: Bearer <token>` to the upstream `solutioniq.cloud` API
-- The token in `.env` (`VITE_AUTH_TOKEN`) has `exp: 2086459643` (valid until 2036) -- but this client-side token is NOT used by the proxy; the proxy uses the secret
+- File: `src/hooks/use-websocket.ts` -- fix the `ws.onopen` handler to send real auth token
+- File: `src/lib/api.ts` -- export `AUTH_TOKEN`  
+- File: `src/hooks/use-chat.ts` -- increase polling timeout
+
