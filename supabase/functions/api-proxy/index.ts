@@ -47,13 +47,19 @@ serve(async (req) => {
     }
 
     const response = await fetch(url, fetchOptions);
-    const responseBody = await response.text();
+    const contentType = response.headers.get("Content-Type") || "application/json";
+    const isText = contentType.startsWith("application/json") || contentType.startsWith("text/");
+
+    const responseBody = isText ? await response.text() : await response.arrayBuffer();
 
     return new Response(responseBody, {
       status: response.status,
       headers: {
         ...corsHeaders,
-        "Content-Type": response.headers.get("Content-Type") || "application/json",
+        "Content-Type": contentType,
+        ...(response.headers.get("Content-Disposition")
+          ? { "Content-Disposition": response.headers.get("Content-Disposition")! }
+          : {}),
       },
     });
   } catch (error) {

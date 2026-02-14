@@ -110,6 +110,14 @@ export interface Capability {
   description?: string;
 }
 
+export interface FileAttachment {
+  file_id: string;
+  filename: string;
+  download_url: string;
+  mime_type: string;
+  size_bytes: number;
+}
+
 export interface ChatSendResponse {
   content: string | null;
   task_id: string;
@@ -120,6 +128,7 @@ export interface ChatSendResponse {
   cost_usd: number;
   tokens_used: number;
   message_number: number;
+  files?: FileAttachment[];
 }
 
 export interface Conversation {

@@ -7,6 +7,7 @@ import type {
   Conversation,
   ConversationMessage,
   Task,
+  FileAttachment,
 } from "@/lib/types";
 import type { UseWebSocketReturn, WsTaskEvent } from "@/hooks/use-websocket";
 
@@ -19,6 +20,7 @@ export interface LocalMessage {
   cost_usd?: number;
   timestamp: string;
   status?: "sending" | "typing" | "degraded" | "error";
+  files?: FileAttachment[];
 }
 
 export function useConversations() {
@@ -90,6 +92,7 @@ export function useChat(websocket?: UseWebSocketReturn) {
                 cost_usd: evt.result?.cost_usd,
                 lane: evt.result?.model?.split("/").pop(),
                 status: undefined,
+                files: (evt.result?.files as FileAttachment[]) || undefined,
               }
             : m
         )
@@ -125,6 +128,15 @@ export function useChat(websocket?: UseWebSocketReturn) {
           const task = await api.get<Task>(`/tasks/${taskId}`);
           if (task.status === "completed" || task.status === "failed") {
             stopPolling();
+            let taskFiles: FileAttachment[] | undefined;
+            if (task.status === "completed" && task.result) {
+              try {
+                const parsed = JSON.parse(task.result);
+                if (parsed?.files) taskFiles = parsed.files;
+              } catch {
+                // result is plain text, no files
+              }
+            }
             setLocalMessages((prev) =>
               prev.map((m) =>
                 m.id === placeholderId
@@ -135,6 +147,7 @@ export function useChat(websocket?: UseWebSocketReturn) {
                           ? task.result || "Done."
                           : task.error || "Something went wrong.",
                       status: task.status === "failed" ? "error" : undefined,
+                      files: taskFiles,
                     }
                   : m
               )
@@ -190,7 +203,7 @@ export function useChat(websocket?: UseWebSocketReturn) {
           setLocalMessages((prev) =>
             prev.map((m) =>
               m.id === assistantPlaceholderId
-                ? { ...m, content: res.content || "Done.", lane: res.lane, model: res.model, cost_usd: res.cost_usd, status: undefined }
+                ? { ...m, content: res.content || "Done.", lane: res.lane, model: res.model, cost_usd: res.cost_usd, status: undefined, files: res.files }
                 : m
             )
           );

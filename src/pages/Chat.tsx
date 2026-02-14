@@ -24,6 +24,10 @@ import { formatDistanceToNow } from "date-fns";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { FileCard } from "@/components/FileCard";
+import { ImagePreviewDialog } from "@/components/ImagePreviewDialog";
+import { downloadFile } from "@/lib/api";
+import type { FileAttachment } from "@/lib/types";
 
 const STARTERS = [
   { text: "What can you help me with?", icon: Sparkles },
@@ -46,8 +50,15 @@ function TypingIndicator() {
   );
 }
 
-function MessageBubble({ msg }: { msg: LocalMessage }) {
+function MessageBubble({
+  msg,
+  onImagePreview,
+}: {
+  msg: LocalMessage;
+  onImagePreview: (file: FileAttachment) => void;
+}) {
   const isUser = msg.role === "user";
+  const hasFiles = !isUser && msg.files && msg.files.length > 0;
 
   return (
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
@@ -96,6 +107,18 @@ function MessageBubble({ msg }: { msg: LocalMessage }) {
             </Badge>
           )}
         </div>
+        {hasFiles && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {msg.files!.map((file) => (
+              <FileCard
+                key={file.file_id}
+                file={file}
+                onDownload={(f) => downloadFile(f.file_id, f.filename)}
+                onPreview={onImagePreview}
+              />
+            ))}
+          </div>
+        )}
         {!isUser && msg.lane && msg.status !== "typing" && (
           <span className="text-[10px] text-muted-foreground/70 px-1">
             {msg.lane} · ${msg.cost_usd?.toFixed(4) ?? "0.00"}
@@ -123,6 +146,7 @@ export default function Chat() {
     useConversations();
 
   const [input, setInput] = useState("");
+  const [previewFile, setPreviewFile] = useState<FileAttachment | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -300,7 +324,7 @@ export default function Chat() {
               </div>
             ) : (
               messages.map((msg) => (
-                <MessageBubble key={msg.id} msg={msg} />
+                <MessageBubble key={msg.id} msg={msg} onImagePreview={setPreviewFile} />
               ))
             )}
             <div ref={bottomRef} />
@@ -333,6 +357,11 @@ export default function Chat() {
           </div>
         </div>
       </div>
+      <ImagePreviewDialog
+        file={previewFile}
+        open={!!previewFile}
+        onOpenChange={(open) => !open && setPreviewFile(null)}
+      />
     </Layout>
   );
 }

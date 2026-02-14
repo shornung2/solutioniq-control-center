@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { WS_URL } from "@/lib/api";
 
+import type { FileAttachment } from "@/lib/types";
+
 export interface WsTaskEvent {
   type: "task.completed" | "task.failed";
   task_id: string;
@@ -8,7 +10,7 @@ export interface WsTaskEvent {
     content?: string;
     model?: string;
     cost_usd?: number;
-    files?: unknown[];
+    files?: FileAttachment[];
   };
 }
 
