@@ -1,95 +1,100 @@
 
 
-# Create Analytics Page with Cost Tracking and Performance Metrics
+# Add Skills Marketplace and Tools Status to Settings Page
 
 ## Overview
-Add a new Analytics page with cost tracking charts, model breakdowns, and routing performance metrics. Uses the existing API proxy pattern and Recharts (via shadcn chart components).
+Add two new cards to the Settings page: a "Skills Marketplace" for installing/uninstalling AI skills with category filtering, and a "Tools Status" card showing tool availability from a deep health check.
 
 ## Changes
 
-### 1. Add analytics types to `src/lib/types.ts`
-New interfaces for the three analytics endpoints:
-- `AnalyticsSummary` -- today's stats and month-to-date
-- `AnalyticsCosts` -- total cost, projection, budget %, breakdowns by model/day/lane
-- `AnalyticsRouting` -- routing stats per lane with success rates and feedback ratings
+### 1. Add types to `src/lib/types.ts`
 
-### 2. Create `src/hooks/use-analytics.ts`
-Three React Query hooks following the existing pattern in `use-dashboard.ts`:
-- `useAnalyticsSummary()` -- calls `/analytics/summary`, refetches every 30s
-- `useAnalyticsCosts(days)` -- calls `/analytics/costs?days={days}`, accepts a `days` parameter (7, 30, 90)
-- `useAnalyticsRouting(days)` -- calls `/analytics/routing?days={days}`, same days parameter
+```text
+SkillLibraryItem {
+  name: string
+  version: string
+  category: string
+  description: string
+  preferred_lane: string
+  trigger_keywords: string[]
+  estimated_cost: number
+}
 
-### 3. Create `src/pages/Analytics.tsx`
-Full page using the `Layout` component, structured in three rows:
+InstalledSkill {
+  id: string
+  name: string
+  installed_at: string
+  config: Record<string, unknown>
+}
 
-**Row 1 -- Stat Cards (4 cards, glow-orange class)**
-- "Today's Cost": `$X.XX` with `N tasks` subtitle (from summary endpoint)
-- "Month to Date": `$X.XX` (from summary)
-- "Monthly Projection": `$X.XX` (from costs endpoint)
-- "Budget Used": percentage with colored Progress bar (green/yellow/red thresholds)
+HealthDeep {
+  tools: Record<string, { available: boolean }>
+}
+```
 
-**Row 2 -- Cost Over Time (full-width Card)**
-- Period selector: 7d / 30d / 90d toggle buttons controlling the `days` state
-- Recharts AreaChart with gradient fill using the shadcn `ChartContainer` component
-- X-axis: dates, Y-axis: USD, tooltip with cost and call count
+- `SkillLibrary` = `Record<string, SkillLibraryItem>`
 
-**Row 3 -- Two side-by-side Cards**
-- Left: "Cost by Model" -- horizontal BarChart, color-coded (Haiku=green, Sonnet=blue, Opus=purple)
-- Right: "Routing Performance" -- Table with columns: Lane, Tasks, Success Rate (colored badge), Avg Rating (star icon + number)
+### 2. Update `src/pages/Settings.tsx`
 
-Loading states use Skeleton components (matching Dashboard pattern). Error states show AlertCircle with retry button.
+Add all skill/tools logic directly in the Settings page (keeping it self-contained like the existing pattern).
 
-### 4. Update `src/components/AppSidebar.tsx`
-- Import `BarChart3` from lucide-react
-- Add `{ title: "Analytics", url: "/analytics", icon: BarChart3 }` to `navItems` array, positioned between Dashboard and Tasks (index 1)
+**Data fetching (React Query):**
+- `useQuery("skills-library")` -- `api.get("/skills/library")` returns `Record<string, SkillLibraryItem>`
+- `useQuery("skills-installed")` -- `api.get("/skills/installed")` returns `InstalledSkill[]`
+- `useQuery("health-deep")` -- `api.get("/health/deep")`
 
-### 5. Update `src/App.tsx`
-- Import the new Analytics page
-- Add route: `<Route path="/analytics" element={<Analytics />} />`
+**Skills Marketplace Card (inserted above Capabilities card):**
+- Tab filter row at top: All | Research | Documents | Creative | Communication | Knowledge | Browser
+- Each skill rendered as a row with:
+  - Name (bold) + Category badge (colored: research=blue, documents=green, creative=purple, communication=yellow, knowledge=gray, browser=orange)
+  - Description (muted, small text)
+  - Estimated cost: "$0.12/use" format
+  - Preferred lane badge (outline)
+  - Switch toggle: checked if skill name is in installed list
+- Toggle ON: `api.post("/skills/{name}/install", {})`, invalidate queries, success toast
+- Toggle OFF: `api.delete("/skills/{id}")` using the installed skill's `id`, invalidate queries, success toast
+- Loading state: Skeleton rows
+- Empty state: "No skills available"
+
+**Category badge color mapping:**
+- research: `bg-blue-500/10 text-blue-500 border-blue-500/20`
+- documents: `bg-green-500/10 text-green-500 border-green-500/20`
+- creative: `bg-purple-500/10 text-purple-500 border-purple-500/20`
+- communication: `bg-yellow-500/10 text-yellow-500 border-yellow-500/20`
+- knowledge: `bg-gray-500/10 text-gray-500 border-gray-500/20`
+- browser: `bg-orange-500/10 text-orange-500 border-orange-500/20`
+
+**Tools Status Card (inserted after Skills Marketplace, before Capabilities):**
+- Fetches `/health/deep`
+- Displays 4 tool rows:
+  - Web Search -- checks `tools.web_search.available`
+  - Document Production -- always true (bundled)
+  - Image Generation -- checks `tools.image_generation.available`
+  - Browser Automation -- checks `tools.browser.available`
+- Each row: icon (CheckCircle2 green or XCircle red) + tool name + "Available" / "Not configured" text
+- Loading state: Skeleton rows
+
+**Mutation handling:**
+- Use `useMutation` from React Query for install/uninstall
+- On success: invalidate `["skills-installed"]` query key and show toast
+- Disable the Switch while mutation is pending to prevent double-clicks
 
 ## Technical Details
 
-**Type definitions for `src/lib/types.ts`:**
-```text
-AnalyticsSummary {
-  today: { tasks: number, tokens: number, cost_usd: number, conversations: number }
-  month_to_date: { cost_usd: number }
-}
+**Tab filter implementation:**
+- State: `activeCategory` string, default "all"
+- Filter skills list: if "all", show everything; otherwise filter by `skill.category === activeCategory`
+- Tabs use small Button components with `variant="ghost"` or `variant="secondary"` for active state
 
-AnalyticsCosts {
-  total_cost_usd: number
-  monthly_projected_usd: number
-  budget_used_pct: number
-  by_model: Array<{ model: string, cost: number, calls: number }>
-  by_day: Array<{ date: string, cost: number, calls: number }>
-  by_lane: Array<{ lane: string, cost: number, tasks: number }>
-}
+**Installed skill lookup:**
+- Create a Map from `installedSkills` array: `name -> id` for quick lookup
+- Switch `checked` = `installedMap.has(skill.name)`
+- On uninstall, use `installedMap.get(skill.name)` to get the `id` for the DELETE call
 
-AnalyticsRouting {
-  routing_stats: Array<{ lane: string, task_count: number, success_rate: number, avg_tokens: number }>
-  feedback_by_lane: Record<string, { avg_rating: number, count: number }>
-}
-```
-
-**Chart configuration:** Uses the existing `ChartContainer`, `ChartTooltip`, `ChartTooltipContent` from `src/components/ui/chart.tsx` with Recharts `AreaChart`, `Area`, `BarChart`, `Bar`, `XAxis`, `YAxis`, `CartesianGrid`.
-
-**Budget Progress bar color logic:**
-- `budget_used_pct < 50` -- green (`[&>div]:bg-green-500`)
-- `50-80` -- yellow (`[&>div]:bg-yellow-500`)
-- `>80` -- red (`[&>div]:bg-red-500`)
-
-**Model color mapping for bar chart:**
-```text
-haiku -> hsl(142, 71%, 45%) (green)
-sonnet -> hsl(217, 91%, 60%) (blue)
-opus -> hsl(271, 91%, 65%) (purple)
-default -> hsl(var(--primary))
-```
+**Cost formatting:**
+- `$${skill.estimated_cost.toFixed(2)}/use`
 
 **Files changed:**
-- `src/lib/types.ts` -- add 3 interfaces
-- `src/hooks/use-analytics.ts` -- new, 3 hooks
-- `src/pages/Analytics.tsx` -- new, full page
-- `src/components/AppSidebar.tsx` -- add nav item
-- `src/App.tsx` -- add route
+- `src/lib/types.ts` -- add SkillLibraryItem, InstalledSkill, HealthDeep interfaces
+- `src/pages/Settings.tsx` -- add Skills Marketplace card, Tools Status card, queries, mutations
 
