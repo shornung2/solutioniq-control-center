@@ -1,100 +1,97 @@
 
 
-# Add Skills Marketplace and Tools Status to Settings Page
+# Create Files Page with Grid/List Views and Filtering
 
 ## Overview
-Add two new cards to the Settings page: a "Skills Marketplace" for installing/uninstalling AI skills with category filtering, and a "Tools Status" card showing tool availability from a deep health check.
+Add a new Files page that displays all generated documents and images, with grid/list view toggle and mime-type category filtering. Uses the existing `downloadFile` function and `FileAttachment` type from the codebase.
 
 ## Changes
 
-### 1. Add types to `src/lib/types.ts`
+### 1. Create `src/pages/Files.tsx`
 
-```text
-SkillLibraryItem {
-  name: string
-  version: string
-  category: string
-  description: string
-  preferred_lane: string
-  trigger_keywords: string[]
-  estimated_cost: number
-}
+New page using the `Layout` component, with the following structure:
 
-InstalledSkill {
-  id: string
-  name: string
-  installed_at: string
-  config: Record<string, unknown>
-}
+**Data fetching:**
+- React Query hook inline: `useQuery({ queryKey: ["files"], queryFn: () => api.get<{ files: FileAttachment[] }>("/files") })`
 
-HealthDeep {
-  tools: Record<string, { available: boolean }>
-}
-```
+**State:**
+- `view`: "grid" | "list" (default "grid")
+- `filter`: "all" | "documents" | "spreadsheets" | "presentations" | "images" (default "all")
 
-- `SkillLibrary` = `Record<string, SkillLibraryItem>`
+**Top Bar:**
+- Page title "Files" on the left
+- View toggle: two icon buttons (LayoutGrid / List icons), highlighted when active
+- Filter buttons row: All | Documents | Spreadsheets | Presentations | Images
+  - Filter logic by mime_type:
+    - documents: `application/pdf` or `wordprocessingml`
+    - spreadsheets: `spreadsheetml`
+    - presentations: `presentationml`
+    - images: `image/*`
 
-### 2. Update `src/pages/Settings.tsx`
+**Grid View (default):**
+- Responsive grid: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4`
+- Each card (Card component):
+  - Large file type icon at top (reuse icon logic from FileCard: PDF=red FileText, Word=blue FileText, Excel=green Table, PPT=orange Presentation, Image=purple ImageIcon)
+  - For image files: show thumbnail preview using `getFilePreviewUrl(file.file_id)` instead of the icon
+  - Filename (truncated, bold, small text)
+  - File size (muted, xs text) using the same `formatFileSize` helper
+  - Download button (outline, small) calling `downloadFile(file.file_id, file.filename)`
 
-Add all skill/tools logic directly in the Settings page (keeping it self-contained like the existing pattern).
+**List View:**
+- Table component with columns: Icon (small) | Filename | Type | Size | Download button
+- Compact rows
+- Type column: human-readable label derived from mime_type (e.g., "PDF", "Word Document", "Spreadsheet", "Image")
 
-**Data fetching (React Query):**
-- `useQuery("skills-library")` -- `api.get("/skills/library")` returns `Record<string, SkillLibraryItem>`
-- `useQuery("skills-installed")` -- `api.get("/skills/installed")` returns `InstalledSkill[]`
-- `useQuery("health-deep")` -- `api.get("/health/deep")`
+**Empty State:**
+- Centered: FolderOpen icon (48px, muted) + "No files yet" heading + "Ask Autopilot to create a document, spreadsheet, or presentation to get started." description
 
-**Skills Marketplace Card (inserted above Capabilities card):**
-- Tab filter row at top: All | Research | Documents | Creative | Communication | Knowledge | Browser
-- Each skill rendered as a row with:
-  - Name (bold) + Category badge (colored: research=blue, documents=green, creative=purple, communication=yellow, knowledge=gray, browser=orange)
-  - Description (muted, small text)
-  - Estimated cost: "$0.12/use" format
-  - Preferred lane badge (outline)
-  - Switch toggle: checked if skill name is in installed list
-- Toggle ON: `api.post("/skills/{name}/install", {})`, invalidate queries, success toast
-- Toggle OFF: `api.delete("/skills/{id}")` using the installed skill's `id`, invalidate queries, success toast
-- Loading state: Skeleton rows
-- Empty state: "No skills available"
+**Loading State:**
+- Grid: 8 skeleton cards
+- List: 5 skeleton table rows
 
-**Category badge color mapping:**
-- research: `bg-blue-500/10 text-blue-500 border-blue-500/20`
-- documents: `bg-green-500/10 text-green-500 border-green-500/20`
-- creative: `bg-purple-500/10 text-purple-500 border-purple-500/20`
-- communication: `bg-yellow-500/10 text-yellow-500 border-yellow-500/20`
-- knowledge: `bg-gray-500/10 text-gray-500 border-gray-500/20`
-- browser: `bg-orange-500/10 text-orange-500 border-orange-500/20`
+**Error State:**
+- AlertCircle icon + "Failed to load files" + Retry button (matching Dashboard pattern)
 
-**Tools Status Card (inserted after Skills Marketplace, before Capabilities):**
-- Fetches `/health/deep`
-- Displays 4 tool rows:
-  - Web Search -- checks `tools.web_search.available`
-  - Document Production -- always true (bundled)
-  - Image Generation -- checks `tools.image_generation.available`
-  - Browser Automation -- checks `tools.browser.available`
-- Each row: icon (CheckCircle2 green or XCircle red) + tool name + "Available" / "Not configured" text
-- Loading state: Skeleton rows
+### 2. Update `src/components/AppSidebar.tsx`
+- Import `FolderOpen` from lucide-react
+- Add `{ title: "Files", url: "/files", icon: FolderOpen }` to `navItems` between Chat and Approvals (index 4)
 
-**Mutation handling:**
-- Use `useMutation` from React Query for install/uninstall
-- On success: invalidate `["skills-installed"]` query key and show toast
-- Disable the Switch while mutation is pending to prevent double-clicks
+### 3. Update `src/App.tsx`
+- Import Files page
+- Add route: `<Route path="/files" element={<Files />} />`
 
 ## Technical Details
 
-**Tab filter implementation:**
-- State: `activeCategory` string, default "all"
-- Filter skills list: if "all", show everything; otherwise filter by `skill.category === activeCategory`
-- Tabs use small Button components with `variant="ghost"` or `variant="secondary"` for active state
+**Mime-type filter mapping:**
+```text
+all -> no filter
+documents -> mime includes "pdf" or "wordprocessingml"
+spreadsheets -> mime includes "spreadsheetml"
+presentations -> mime includes "presentationml"
+images -> mime starts with "image/"
+```
 
-**Installed skill lookup:**
-- Create a Map from `installedSkills` array: `name -> id` for quick lookup
-- Switch `checked` = `installedMap.has(skill.name)`
-- On uninstall, use `installedMap.get(skill.name)` to get the `id` for the DELETE call
+**Human-readable type labels:**
+```text
+application/pdf -> "PDF"
+*wordprocessingml* -> "Word Document"
+*spreadsheetml* -> "Spreadsheet"
+*presentationml* -> "Presentation"
+image/* -> "Image"
+default -> "File"
+```
 
-**Cost formatting:**
-- `$${skill.estimated_cost.toFixed(2)}/use`
+**File size formatting** (same helper as FileCard):
+```text
+< 1024 -> "X B"
+< 1024*1024 -> "X.X KB"
+else -> "X.X MB"
+```
+
+**Image thumbnail:** For image files in grid view, render an `<img>` tag with `src={getFilePreviewUrl(file.file_id)}` and `object-cover` styling, replacing the type icon.
 
 **Files changed:**
-- `src/lib/types.ts` -- add SkillLibraryItem, InstalledSkill, HealthDeep interfaces
-- `src/pages/Settings.tsx` -- add Skills Marketplace card, Tools Status card, queries, mutations
+- `src/pages/Files.tsx` -- new page
+- `src/components/AppSidebar.tsx` -- add nav item
+- `src/App.tsx` -- add route
 
