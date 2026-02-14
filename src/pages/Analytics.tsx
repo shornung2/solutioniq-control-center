@@ -91,10 +91,10 @@ export default function Analytics() {
                   <div>
                     <p className="text-xs text-muted-foreground">Today's Cost</p>
                     <p className="text-2xl font-heading font-bold">
-                      ${summary?.today.cost_usd.toFixed(2) ?? "—"}
+                      ${summary?.today?.cost_usd?.toFixed(2) ?? "0.00"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {summary?.today.tasks ?? 0} tasks
+                      {summary?.today?.tasks ?? 0} tasks
                     </p>
                   </div>
                 </CardContent>
@@ -108,7 +108,7 @@ export default function Analytics() {
                   <div>
                     <p className="text-xs text-muted-foreground">Month to Date</p>
                     <p className="text-2xl font-heading font-bold">
-                      ${summary?.month_to_date.cost_usd.toFixed(2) ?? "—"}
+                      ${summary?.month_to_date?.cost_usd?.toFixed(2) ?? "0.00"}
                     </p>
                   </div>
                 </CardContent>
@@ -122,7 +122,7 @@ export default function Analytics() {
                   <div>
                     <p className="text-xs text-muted-foreground">Monthly Projection</p>
                     <p className="text-2xl font-heading font-bold">
-                      ${costs?.monthly_projected_usd.toFixed(2) ?? "—"}
+                      ${costs?.monthly_projected_usd?.toFixed(2) ?? "0.00"}
                     </p>
                   </div>
                 </CardContent>
