@@ -1,78 +1,99 @@
 
 
-# Rebuild Chat Page with Proper Chat API
+# Add WebSocket Support for Real-Time Chat
 
 ## Overview
-Replace the current task-polling chat implementation with the real chat API that supports conversation threading, markdown rendering, and a two-panel layout with conversation history.
+Replace polling with WebSocket for instant task resolution. Polling remains as a fallback when the WebSocket is disconnected.
 
 ## Changes
 
-### 1. Install dependencies
-Add `react-markdown` and `remark-gfm` for rendering assistant responses as rich markdown.
+### 1. Create `src/hooks/use-websocket.ts`
+New hook that manages a persistent WebSocket connection:
+- Connects to `WS_URL` (from `src/lib/api.ts`) on mount
+- Sends `{ token: "stream" }` on open
+- Listens for messages with format: `{ event: "update", data: { type: "task.completed|task.failed", task_id, result: { content, model, cost_usd, files } } }`
+- Exposes: `lastEvent`, `isConnected`, `registerPendingTask(id)`, `removePendingTask(id)`, `pendingTaskIds`
+- Auto-reconnect with exponential backoff: 1s, 2s, 4s, 8s, capped at 30s
+- Resets backoff on successful connection
+- Cleans up WebSocket on unmount
 
-### 2. Add chat types to `src/lib/types.ts`
-Define new interfaces for the chat API responses:
-- `ChatSendResponse` -- response from `POST /chat` (content, task_id, conversation_id, status, lane, model, cost_usd, tokens_used, message_number)
-- `Conversation` -- item from `GET /chat/conversations` (id, title, message_count, total_cost_usd, is_active, created_at, last_message_at)
-- `ConversationMessage` -- item from `GET /chat/conversations/{id}/messages` (id, role, content, lane, model, cost_usd, timestamp)
+### 2. Update `src/hooks/use-chat.ts`
+- Accept an optional `websocket` parameter (the return value of `useWebSocket`)
+- When a message returns `status: "queued"`:
+  - If WebSocket is connected: call `registerPendingTask(task_id)` and skip polling
+  - If WebSocket is NOT connected: fall back to existing `pollForResult` behavior
+- Add a `useEffect` that watches `websocket.lastEvent`:
+  - If event type is `task.completed` and matches a pending placeholder: replace the typing indicator with the result content, lane/model/cost metadata
+  - If event type is `task.failed`: show error message in red
+  - In both cases: invalidate conversation queries and call `removePendingTask`
+- Store a mapping of `task_id` to `placeholderId` so incoming WebSocket events can target the correct local message
 
-### 3. Rewrite `src/hooks/use-chat.ts`
-Completely replace with new hook exposing:
-- `useConversations()` -- fetches conversation list via `GET /chat/conversations`
-- `useConversationMessages(conversationId)` -- fetches messages for a conversation via `GET /chat/conversations/{id}/messages`
-- `useSendMessage()` -- mutation that calls `POST /chat` with `{ message, conversation_id }`, handles the response status:
-  - `completed`: return content immediately
-  - `queued`: start polling `GET /tasks/{task_id}` every 2 seconds until resolved
-  - `degraded`: return content with a degraded flag
-  - On 429 error: show rate-limit toast via sonner
-- State management: track `activeConversationId` and `messages` (local array for the active conversation, updated optimistically)
+### 3. Update `src/pages/Chat.tsx`
+- Instantiate `useWebSocket()` at the top of the component
+- Pass the websocket object into `useChat(websocket)`
+- No other UI changes needed -- the typing indicator and message rendering already work
 
-### 4. Rewrite `src/pages/Chat.tsx`
-Two-panel layout inside the existing `<Layout>` wrapper:
+### 4. Update `src/hooks/use-connection-status.ts`
+- Accept an optional `wsConnected` boolean parameter
+- Return a status object: `{ apiConnected, wsConnected, status: "full" | "partial" | "disconnected" }`
 
-**Left panel (conversation list, 280px wide, collapsible on mobile):**
-- "New Conversation" button at top -- clears active conversation, shows empty state
-- List of conversations from the hook, each showing: truncated title (45 chars), relative time (using `date-fns` `formatDistanceToNow`), message count pill
-- Active conversation gets a left border highlight in primary color
-- On mobile: toggle with a menu button, overlay panel
+### 5. Update `src/components/Header.tsx`
+- Import and call `useWebSocket` (or receive wsConnected from a shared context/prop)
+- To avoid creating a second WebSocket connection, lift `useWebSocket` into the Layout component and pass `isConnected` down
+- Actually, simpler approach: create a WebSocket context provider so both Header and Chat share the same connection
 
-**Right panel (chat area, flex-1):**
-- Messages area with scroll, auto-scroll to bottom on new messages
-- User messages: right-aligned, primary background
-- Assistant messages: left-aligned, muted background, content rendered as markdown via `react-markdown` + `remark-gfm`
-- Below each assistant message: subtle pill showing `"{lane} . ${cost_usd}"` (e.g., "haiku . $0.002")
-- Typing indicator: three animated dots while waiting for queued task resolution
-- Empty state (no conversation): 2x2 grid of 4 starter cards ("What can you help me with?", "Research a company", "Draft a follow-up email", "Create a competitive battlecard") -- clicking sends as first message
+### Revised approach for sharing WebSocket:
 
-**Bottom input bar:**
-- Textarea (auto-resizing, 1-3 lines, uses existing Textarea component)
-- Enter sends, Shift+Enter for newline
-- Send button with loading spinner while sending
-- Auto-focus on mount and after send
-- Disabled while sending
+### 5a. Create `src/contexts/WebSocketContext.tsx`
+- A React context provider that wraps the app (inside Layout or at the App level)
+- Instantiates `useWebSocket()` once
+- Provides the websocket state to all consumers via `useWebSocketContext()`
 
-### 5. Add markdown styling to `src/index.css`
-Add scoped styles for `.markdown-content` to properly style headings, code blocks, lists, tables, blockquotes, and inline code rendered by react-markdown.
+### 5b. Update `src/components/Layout.tsx`
+- Wrap children with `<WebSocketProvider>`
+
+### 5c. Update `src/pages/Chat.tsx`
+- Use `useWebSocketContext()` instead of calling `useWebSocket()` directly
+- Pass it to `useChat()`
+
+### 5d. Update `src/components/Header.tsx`
+- Use `useWebSocketContext()` to get `isConnected`
+- Combine with existing API health check:
+  - Green dot + "Connected": both API and WebSocket connected
+  - Yellow dot + "Partial": only one connected
+  - Red dot + "Disconnected": neither connected
 
 ## Technical Details
 
-**Polling for queued responses:**
-When `POST /chat` returns `status: "queued"`, the hook will:
-1. Add a placeholder "typing" message to the local messages array
-2. Start an interval polling `api.get("/tasks/{task_id}")` every 2 seconds
-3. When the task reaches `completed` or `failed`, replace the placeholder with the actual result and stop polling
-4. Timeout after 60 seconds with a failure message
+**WebSocket message format expected:**
+```text
+{ 
+  event: "update", 
+  data: { 
+    type: "task.completed" | "task.failed", 
+    task_id: "uuid", 
+    result: { content: "...", model: "...", cost_usd: 0.12, files: [...] } 
+  } 
+}
+```
 
-**Optimistic updates:**
-When the user sends a message, it appears immediately in the message list as a user bubble. If the API returns `completed`, the assistant response also appears immediately. If `queued`, a typing indicator shows until polling resolves.
+**Exponential backoff implementation:**
+- Start at 1000ms delay
+- Double on each failed reconnect attempt
+- Cap at 30000ms
+- Reset to 1000ms on successful connection (`onopen`)
 
-**Error handling:**
-- 429 responses trigger a sonner toast: "Rate limited. Please wait a moment."
-- Failed tasks show an error message bubble in red
-- Network errors show a toast and keep the user's message visible
+**Task-to-placeholder mapping in use-chat.ts:**
+- New ref: `taskPlaceholderMap = useRef<Map<string, string>>()` mapping `task_id` to `assistantPlaceholderId`
+- On queued + WS connected: store mapping, register pending task, skip polling
+- On WS event: look up placeholder ID, update local message, clean up mapping
 
 **File structure:**
-- `src/lib/types.ts` -- add chat-specific types
-- `src/hooks/use-chat.ts` -- complete rewrite with conversation support
-- `src/pages/Chat.tsx` -- complete rewrite with two-panel layout
-- `src/index.css` -- add markdown content styles
+- `src/hooks/use-websocket.ts` -- new
+- `src/contexts/WebSocketContext.tsx` -- new
+- `src/hooks/use-chat.ts` -- modified
+- `src/hooks/use-connection-status.ts` -- modified
+- `src/components/Header.tsx` -- modified
+- `src/components/Layout.tsx` -- modified
+- `src/pages/Chat.tsx` -- modified
+
