@@ -7,7 +7,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const headers = {
     "Content-Type": "application/json",
     ...options.headers,
-    "Authorization": `Bearer ${AUTH_TOKEN}`,
+    Authorization: `Bearer ${AUTH_TOKEN}`,
   };
 
   const res = await fetch(url, {
@@ -30,12 +30,10 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
-  get: <T>(endpoint: string) => request<T>(endpoint),
-  post: <T>(endpoint: string, body: unknown) =>
-    request<T>(endpoint, { method: "POST", body: JSON.stringify(body) }),
-  put: <T>(endpoint: string, body: unknown) =>
-    request<T>(endpoint, { method: "PUT", body: JSON.stringify(body) }),
-  delete: <T>(endpoint: string) => request<T>(endpoint, { method: "DELETE" }),
+  get: <T,>(endpoint: string) => request<T>(endpoint),
+  post: <T,>(endpoint: string, body: unknown) => request<T>(endpoint, { method: "POST", body: JSON.stringify(body) }),
+  put: <T,>(endpoint: string, body: unknown) => request<T>(endpoint, { method: "PUT", body: JSON.stringify(body) }),
+  delete: <T,>(endpoint: string) => request<T>(endpoint, { method: "DELETE" }),
   healthCheck: async (): Promise<boolean> => {
     try {
       await request("/agent/status");
@@ -50,10 +48,7 @@ export function createWebSocket(onMessage: (data: unknown) => void, onError?: (e
   const ws = new WebSocket(WS_URL);
 
   ws.onopen = () => {
-    // Send auth token immediately upon connection if your backend expects it in the first message
-    // OR backend might use query param. 
-    // For now, standard auth header isn't supported in browser WebSocket API. 
-    // We'll rely on the handshake or first message.
+    // Send auth token immediately upon connection
     ws.send(JSON.stringify({ type: "auth", token: AUTH_TOKEN }));
   };
 
@@ -72,13 +67,11 @@ export function createWebSocket(onMessage: (data: unknown) => void, onError?: (e
 }
 
 export async function downloadFile(fileId: string, filename: string) {
-  // Basic download via link, assuming auth via cookie or query param if needed. 
-  // Implementing direct fetch download with auth header:
   const url = `${API_URL}/files/${fileId}`;
   const res = await fetch(url, {
     headers: {
-      "Authorization": `Bearer ${AUTH_TOKEN}`,
-    }
+      Authorization: `Bearer ${AUTH_TOKEN}`,
+    },
   });
 
   if (!res.ok) throw new Error("Download failed");
@@ -94,10 +87,7 @@ export async function downloadFile(fileId: string, filename: string) {
   URL.revokeObjectURL(objectUrl);
 }
 
-
 export function getFilePreviewUrl(fileId: string): string {
-  // Check if we need a signed URL or can just pass the token in query (less secure) or assume session
-  // For now return direct link, user might need to handle auth
   return `${API_URL}/files/${fileId}?token=${AUTH_TOKEN}`;
 }
 
