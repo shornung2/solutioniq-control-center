@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  BarChart3,
   ListTodo,
   MessageSquare,
   ShieldCheck,
@@ -19,6 +20,7 @@ import {
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Tasks", url: "/tasks", icon: ListTodo },
   { title: "Chat", url: "/chat", icon: MessageSquare },
   { title: "Approvals", url: "/approvals", icon: ShieldCheck },
