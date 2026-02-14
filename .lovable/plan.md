@@ -1,56 +1,20 @@
 
-# Fix: App Crash and API Authentication Failures
+# Update SOLUTIONIQ_ACCESS_TOKEN Secret
 
-## Two Issues Found
+## Problem
+The `SOLUTIONIQ_ACCESS_TOKEN` stored in the backend secrets is expired or invalid. All authenticated API calls to `solutioniq.cloud` return `401 Unauthorized` ("Invalid or expired token"), while unauthenticated endpoints like `/health/deep` work fine.
 
-### Issue 1: Chat page crashes -- WebSocket context used outside provider (CRITICAL)
+## Solution
+1. Update the `SOLUTIONIQ_ACCESS_TOKEN` secret with a fresh, long-lived token
+2. Redeploy the `api-proxy` edge function to pick up the new secret
+3. Test the connection by calling `/agent/status` and `/chat/conversations` through the proxy
 
-The `Chat` component calls `useWebSocketContext()` at the top of the component function (line 139), but `WebSocketProvider` only exists inside `<Layout>`, which renders later in Chat's return statement (line 197). React hooks run before the JSX renders, so the context is `null` and throws.
-
-**The same pattern applies to all pages** -- every page component renders `<Layout>` inside its return, but the provider is inside Layout. Any page that uses `useWebSocketContext` directly will crash.
-
-**Fix:** Move `WebSocketProvider` from `Layout` up into `App.tsx`, wrapping all routes. This ensures the provider is available before any page component's hooks run.
-
-**Files changed:**
-- `src/App.tsx` -- Wrap `BrowserRouter` (or its children) with `WebSocketProvider`
-- `src/components/Layout.tsx` -- Remove `WebSocketProvider` wrapper (keep `LayoutInner` as the default export pattern)
-
-### Issue 2: API returning 401 "Invalid or expired token"
-
-Network logs show the backend function proxy returning `401 {"detail":"Invalid or expired token"}`. The edge function config has `verify_jwt = false`, so this is not a JWT issue on the edge function side. The 401 comes from the upstream VPS (`solutioniq.cloud`) rejecting the `SOLUTIONIQ_ACCESS_TOKEN`.
-
-**Fix:** Verify the `SOLUTIONIQ_ACCESS_TOKEN` secret is set and valid. If expired, it needs to be updated.
-
-**Files changed:** None (secret configuration only)
+## Steps
+1. Prompt you to enter the new token value securely
+2. Save it as the `SOLUTIONIQ_ACCESS_TOKEN` secret
+3. Verify the proxy works by testing authenticated endpoints
 
 ## Technical Details
-
-**App.tsx change:**
-```text
-import { WebSocketProvider } from "@/contexts/WebSocketContext";
-
-const App = () => (
-  <QueryClientProvider ...>
-    <TooltipProvider>
-      ...
-      <BrowserRouter>
-        <WebSocketProvider>
-          <Routes>...</Routes>
-        </WebSocketProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
-```
-
-**Layout.tsx change:**
-Remove the `WebSocketProvider` wrapper and the import. The `Layout` function simply renders `LayoutInner` directly (no more two-component pattern needed for WebSocket).
-
-**Secret check:**
-Will verify `SOLUTIONIQ_ACCESS_TOKEN` is present in configured secrets. If missing or expired, will prompt for re-entry.
-
-## Sequence
-
-1. Move `WebSocketProvider` to `App.tsx` (fixes the crash)
-2. Simplify `Layout.tsx` (remove redundant provider)
-3. Check and fix the API token secret
+- The `api-proxy` edge function reads `SOLUTIONIQ_ACCESS_TOKEN` via `Deno.env.get("SOLUTIONIQ_ACCESS_TOKEN")`
+- The token is sent as `Authorization: Bearer <token>` to the upstream `solutioniq.cloud` API
+- The token in `.env` (`VITE_AUTH_TOKEN`) has `exp: 2086459643` (valid until 2036) -- but this client-side token is NOT used by the proxy; the proxy uses the secret
