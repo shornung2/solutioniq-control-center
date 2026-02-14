@@ -150,3 +150,22 @@ export interface ConversationMessage {
   cost_usd: number;
   timestamp: string;
 }
+
+export interface AnalyticsSummary {
+  today: { tasks: number; tokens: number; cost_usd: number; conversations: number };
+  month_to_date: { cost_usd: number };
+}
+
+export interface AnalyticsCosts {
+  total_cost_usd: number;
+  monthly_projected_usd: number;
+  budget_used_pct: number;
+  by_model: Array<{ model: string; cost: number; calls: number }>;
+  by_day: Array<{ date: string; cost: number; calls: number }>;
+  by_lane: Array<{ lane: string; cost: number; tasks: number }>;
+}
+
+export interface AnalyticsRouting {
+  routing_stats: Array<{ lane: string; task_count: number; success_rate: number; avg_tokens: number }>;
+  feedback_by_lane: Record<string, { avg_rating: number; count: number }>;
+}
