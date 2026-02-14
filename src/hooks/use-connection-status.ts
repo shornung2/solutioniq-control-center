@@ -4,7 +4,7 @@ import type { HealthDeepResponse } from "@/lib/types";
 
 export type ConnectionStatus = "full" | "partial" | "disconnected";
 
-export function useConnectionStatus(wsConnected?: boolean) {
+export function useConnectionStatus() {
   const { data: healthData = null } = useQuery({
     queryKey: ["health-deep"],
     queryFn: async (): Promise<HealthDeepResponse | null> => {
@@ -20,18 +20,14 @@ export function useConnectionStatus(wsConnected?: boolean) {
     staleTime: 25000,
   });
 
-  const apiConnected = healthData !== null;
-  const ws = wsConnected ?? false;
-
   const status: ConnectionStatus =
-    healthData?.status === "healthy" && ws
+    healthData?.status === "healthy"
       ? "full"
-      : apiConnected || ws
+      : healthData?.status === "degraded"
         ? "partial"
         : "disconnected";
 
-  // Only report degraded when we have confirmed data, not on fetch failure
   const isDegraded = healthData?.status === "degraded";
 
-  return { apiConnected, wsConnected: ws, status, healthData, isDegraded };
+  return { status, healthData, isDegraded };
 }
