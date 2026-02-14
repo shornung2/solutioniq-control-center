@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Analytics from "./pages/Analytics";
 import Tasks from "./pages/Tasks";
 import Chat from "./pages/Chat";
+import Files from "./pages/Files";
 import Approvals from "./pages/Approvals";
 import SettingsPage from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/chat" element={<Chat />} />
+          <Route path="/files" element={<Files />} />
           <Route path="/approvals" element={<Approvals />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFound />} />
