@@ -4,7 +4,6 @@ import { Header } from "@/components/Header";
 import { WelcomeDialog } from "@/components/WelcomeDialog";
 import { useTheme } from "@/hooks/use-theme";
 import { useConnectionStatus } from "@/hooks/use-connection-status";
-import { WebSocketProvider } from "@/contexts/WebSocketContext";
 import { AlertTriangle } from "lucide-react";
 
 interface LayoutProps {
@@ -40,9 +39,5 @@ function LayoutInner({ children }: LayoutProps) {
 }
 
 export function Layout({ children }: LayoutProps) {
-  return (
-    <WebSocketProvider>
-      <LayoutInner>{children}</LayoutInner>
-    </WebSocketProvider>
-  );
+  return <LayoutInner>{children}</LayoutInner>;
 }

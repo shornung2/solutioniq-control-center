@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { WebSocketProvider } from "@/contexts/WebSocketContext";
 import Dashboard from "./pages/Dashboard";
 import Analytics from "./pages/Analytics";
 import Tasks from "./pages/Tasks";
@@ -20,16 +21,18 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/tasks" element={<Tasks />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/files" element={<Files />} />
-          <Route path="/approvals" element={<Approvals />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <WebSocketProvider>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/tasks" element={<Tasks />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/files" element={<Files />} />
+            <Route path="/approvals" element={<Approvals />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </WebSocketProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
