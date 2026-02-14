@@ -7,6 +7,9 @@ export function useAnalyticsSummary() {
     queryKey: ["analytics-summary"],
     queryFn: () => api.get<AnalyticsSummary>("/analytics/summary"),
     refetchInterval: 30000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: 25000,
   });
 }
 
@@ -14,6 +17,9 @@ export function useAnalyticsCosts(days: number) {
   return useQuery<AnalyticsCosts>({
     queryKey: ["analytics-costs", days],
     queryFn: () => api.get<AnalyticsCosts>(`/analytics/costs?days=${days}`),
+    retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: 25000,
   });
 }
 
@@ -21,5 +27,8 @@ export function useAnalyticsRouting(days: number) {
   return useQuery<AnalyticsRouting>({
     queryKey: ["analytics-routing", days],
     queryFn: () => api.get<AnalyticsRouting>(`/analytics/routing?days=${days}`),
+    retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: 25000,
   });
 }
