@@ -26,6 +26,7 @@ import remarkGfm from "remark-gfm";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { FileCard } from "@/components/FileCard";
 import { ImagePreviewDialog } from "@/components/ImagePreviewDialog";
+import { FeedbackStars } from "@/components/FeedbackStars";
 import { downloadFile } from "@/lib/api";
 import type { FileAttachment } from "@/lib/types";
 
@@ -123,6 +124,9 @@ function MessageBubble({
           <span className="text-[10px] text-muted-foreground/70 px-1">
             {msg.lane} · ${msg.cost_usd?.toFixed(4) ?? "0.00"}
           </span>
+        )}
+        {!isUser && msg.task_id && msg.status !== "typing" && msg.status !== "sending" && (
+          <FeedbackStars taskId={msg.task_id} />
         )}
       </div>
     </div>
