@@ -169,3 +169,26 @@ export interface AnalyticsRouting {
   routing_stats: Array<{ lane: string; task_count: number; success_rate: number; avg_tokens: number }>;
   feedback_by_lane: Record<string, { avg_rating: number; count: number }>;
 }
+
+export interface SkillLibraryItem {
+  name: string;
+  version: string;
+  category: string;
+  description: string;
+  preferred_lane: string;
+  trigger_keywords: string[];
+  estimated_cost: number;
+}
+
+export type SkillLibrary = Record<string, SkillLibraryItem>;
+
+export interface InstalledSkill {
+  id: string;
+  name: string;
+  installed_at: string;
+  config: Record<string, unknown>;
+}
+
+export interface HealthDeep {
+  tools: Record<string, { available: boolean }>;
+}
