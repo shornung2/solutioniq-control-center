@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { WelcomeDialog } from "@/components/WelcomeDialog";
 import { useTheme } from "@/hooks/use-theme";
 import { useConnectionStatus } from "@/hooks/use-connection-status";
-import { WebSocketProvider, useWebSocketContext } from "@/contexts/WebSocketContext";
+import { WebSocketProvider } from "@/contexts/WebSocketContext";
 import { AlertTriangle } from "lucide-react";
 
 interface LayoutProps {
@@ -13,8 +13,7 @@ interface LayoutProps {
 
 function LayoutInner({ children }: LayoutProps) {
   const { theme, toggleTheme } = useTheme();
-  const { isConnected: wsConnected } = useWebSocketContext();
-  const { status, healthData, isDegraded } = useConnectionStatus(wsConnected);
+  const { status, healthData, isDegraded } = useConnectionStatus();
 
   return (
     <SidebarProvider>
