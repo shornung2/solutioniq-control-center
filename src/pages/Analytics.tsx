@@ -52,8 +52,16 @@ export default function Analytics() {
     cost: { label: "Cost (USD)", color: "hsl(var(--primary))" },
   };
 
+  const byModelArray = Array.isArray(costs?.by_model)
+    ? costs.by_model
+    : Object.entries(costs?.by_model ?? {}).map(([model, data]: [string, any]) => ({
+        model,
+        cost: data?.cost ?? data ?? 0,
+        tokens: data?.tokens ?? 0,
+      }));
+
   const modelChartConfig = Object.fromEntries(
-    (costs?.by_model ?? []).map((m) => [
+    byModelArray.map((m) => [
       m.model,
       { label: m.model, color: MODEL_COLORS[m.model.toLowerCase()] ?? "hsl(var(--primary))" },
     ])
@@ -219,7 +227,7 @@ export default function Analytics() {
               ) : (
                 <ChartContainer config={modelChartConfig} className="h-48 w-full">
                   <BarChart
-                    data={costs?.by_model ?? []}
+                    data={byModelArray}
                     layout="vertical"
                     margin={{ left: 60 }}
                   >
@@ -248,7 +256,7 @@ export default function Analytics() {
                       fill="hsl(var(--primary))"
                       // Per-bar color via cell rendering
                     >
-                      {(costs?.by_model ?? []).map((entry, idx) => (
+                      {byModelArray.map((entry, idx) => (
                         <rect
                           key={idx}
                           fill={MODEL_COLORS[entry.model.toLowerCase()] ?? "hsl(var(--primary))"}
