@@ -91,4 +91,4 @@ export function getFilePreviewUrl(fileId: string): string {
   return `${API_URL}/files/${fileId}?token=${AUTH_TOKEN}`;
 }
 
-export { API_URL, WS_URL };
+export { API_URL, WS_URL, AUTH_TOKEN };

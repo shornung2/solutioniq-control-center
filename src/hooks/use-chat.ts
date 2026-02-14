@@ -122,7 +122,7 @@ export function useChat(websocket?: UseWebSocketReturn) {
   const pollForResult = useCallback(
     (taskId: string, placeholderId: string, conversationId: string) => {
       let attempts = 0;
-      const maxAttempts = 30;
+      const maxAttempts = 60;
 
       pollingRef.current = setInterval(async () => {
         attempts++;
