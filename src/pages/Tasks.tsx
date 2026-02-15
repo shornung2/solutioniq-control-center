@@ -3,17 +3,19 @@ import { Layout } from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { AlertCircle, Plus, Loader2, Star } from "lucide-react";
+import { AlertCircle, Plus, Loader2, Star, Download } from "lucide-react";
 import { useTasks, useCreateTask, useTaskTrace } from "@/hooks/use-tasks";
 import { useTaskFeedback } from "@/hooks/use-feedback";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { FeedbackStars } from "@/components/FeedbackStars";
+import { BulkActionBar } from "@/components/BulkActionBar";
 import type { Task } from "@/lib/types";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -23,6 +25,22 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "o
   failed: "destructive",
 };
 
+function exportTasksCsv(tasks: Task[]) {
+  const header = "ID,Title,Status,Priority,Created,Tokens\n";
+  const rows = tasks.map((t) =>
+    `"${t.id}","${t.title}","${t.status}",${t.priority ?? ""},${t.created_at},${t.tokens_used}`
+  ).join("\n");
+  const blob = new Blob([header + rows], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "tasks-export.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function Tasks() {
   const [filter, setFilter] = useState("all");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -30,6 +48,7 @@ export default function Tasks() {
   const [feedbackTaskId, setFeedbackTaskId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newPriority, setNewPriority] = useState([3]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { data: tasks = [], isLoading, isError, refetch } = useTasks(filter);
   const createTask = useCreateTask();
   const { data: trace, isLoading: traceLoading } = useTaskTrace(selectedTask?.id || null);
@@ -46,12 +65,37 @@ export default function Tasks() {
     });
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === tasks.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(tasks.map((t) => t.id)));
+    }
+  };
+
+  const exportSelected = () => {
+    const selected = tasks.filter((t) => selectedIds.has(t.id));
+    exportTasksCsv(selected.length > 0 ? selected : tasks);
+    setSelectedIds(new Set());
+  };
+
   return (
     <Layout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-heading font-bold">Tasks</h2>
           <div className="flex gap-2">
+            <Button size="sm" variant="outline" className="gap-1" onClick={() => exportTasksCsv(tasks)}>
+              <Download className="h-3 w-3" /> CSV
+            </Button>
             <Button size="sm" className="gap-1" onClick={() => setShowCreate(true)}>
               <Plus className="h-4 w-4" /> Create Task
             </Button>
@@ -91,18 +135,32 @@ export default function Tasks() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-muted-foreground">
+                      <th className="p-3 w-10">
+                        <Checkbox
+                          checked={selectedIds.size === tasks.length && tasks.length > 0}
+                          onCheckedChange={toggleAll}
+                          aria-label="Select all"
+                        />
+                      </th>
                       <th className="text-left p-3 font-medium">ID</th>
                       <th className="text-left p-3 font-medium">Task</th>
                       <th className="text-left p-3 font-medium">Status</th>
                       <th className="text-left p-3 font-medium">Priority</th>
                       <th className="text-left p-3 font-medium">Created</th>
-                      <th className="text-left p-3 font-medium">Duration</th>
+                      <th className="text-left p-3 font-medium">Tokens</th>
                       <th className="p-3"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {tasks.map((task) => (
                       <tr key={task.id} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
+                        <td className="p-3">
+                          <Checkbox
+                            checked={selectedIds.has(task.id)}
+                            onCheckedChange={() => toggleSelect(task.id)}
+                            aria-label={`Select ${task.title}`}
+                          />
+                        </td>
                         <td className="p-3 font-mono text-xs text-muted-foreground">{task.id}</td>
                         <td className="p-3">{task.title}</td>
                         <td className="p-3">
@@ -124,6 +182,12 @@ export default function Tasks() {
             )}
           </CardContent>
         </Card>
+
+        <BulkActionBar
+          count={selectedIds.size}
+          onExport={exportSelected}
+          onClear={() => setSelectedIds(new Set())}
+        />
 
         {/* Task Detail with Trace */}
         <Dialog open={!!selectedTask} onOpenChange={() => setSelectedTask(null)}>

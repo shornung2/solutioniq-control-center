@@ -6,6 +6,8 @@ import {
   FolderOpen,
   ShieldCheck,
   Settings,
+  Activity,
+  Puzzle,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -26,6 +28,8 @@ const navItems = [
   { title: "Chat", url: "/chat", icon: MessageSquare },
   { title: "Files", url: "/files", icon: FolderOpen },
   { title: "Approvals", url: "/approvals", icon: ShieldCheck },
+  { title: "Skills", url: "/skills", icon: Puzzle },
+  { title: "System Status", url: "/system-status", icon: Activity },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 

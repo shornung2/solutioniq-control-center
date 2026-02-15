@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Send,
   Bot,
@@ -19,8 +20,10 @@ import {
   Swords,
   Trash2,
   Paperclip,
+  ArchiveRestore,
+  Archive,
 } from "lucide-react";
-import { useChat, useConversations, type LocalMessage } from "@/hooks/use-chat";
+import { useChat, useConversations, useRestoreConversation, type LocalMessage } from "@/hooks/use-chat";
 import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { formatDistanceToNow } from "date-fns";
 import ReactMarkdown from "react-markdown";
@@ -32,6 +35,7 @@ import { FeedbackStars } from "@/components/FeedbackStars";
 import { downloadFile } from "@/lib/api";
 import { uploadFile, validateFile } from "@/services/fileService";
 import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import type { FileAttachment } from "@/lib/types";
 import {
   AlertDialog,
@@ -150,6 +154,7 @@ function MessageBubble({
 export default function Chat() {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const [convTab, setConvTab] = useState<"active" | "archived">("active");
   const websocket = useWebSocketContext();
   const {
     messages,
@@ -161,8 +166,9 @@ export default function Chat() {
     isSending,
     deleteConversation,
   } = useChat(websocket);
-  const { data: conversations = [], isLoading: convsLoading } =
-    useConversations();
+  const { data: conversations = [], isLoading: convsLoading } = useConversations(false);
+  const { data: archivedConvs = [], isLoading: archivedLoading } = useConversations(true);
+  const restoreMutation = useRestoreConversation();
 
   const [input, setInput] = useState("");
   const [previewFile, setPreviewFile] = useState<FileAttachment | null>(null);
@@ -229,6 +235,19 @@ export default function Chat() {
     }
   };
 
+  const handleArchive = async (id: string) => {
+    await deleteConversation(id);
+    sonnerToast.success("Conversation archived", {
+      action: {
+        label: "Undo",
+        onClick: () => restoreMutation.mutate(id),
+      },
+    });
+  };
+
+  const displayConvs = convTab === "active" ? conversations : archivedConvs;
+  const displayLoading = convTab === "active" ? convsLoading : archivedLoading;
+
   const showEmptyState =
     !activeConversationId && messages.length === 0 && !isLoading;
 
@@ -266,26 +285,34 @@ export default function Chat() {
                 <PanelLeftClose className="h-4 w-4" />
               </Button>
             </div>
+            <div className="px-3 pt-2">
+              <Tabs value={convTab} onValueChange={(v) => setConvTab(v as "active" | "archived")}>
+                <TabsList className="w-full h-8">
+                  <TabsTrigger value="active" className="flex-1 text-xs">Active</TabsTrigger>
+                  <TabsTrigger value="archived" className="flex-1 text-xs">Archived</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
             <div className="flex-1 overflow-y-auto">
-              {convsLoading ? (
+              {displayLoading ? (
                 <div className="p-3 space-y-2">
                   {Array.from({ length: 4 }).map((_, i) => (
                     <Skeleton key={i} className="h-14 w-full bg-sidebar-accent/50" />
                   ))}
                 </div>
-              ) : conversations.length === 0 ? (
+              ) : displayConvs.length === 0 ? (
                 <p className="text-xs text-sidebar-foreground/50 p-4 text-center">
-                  No conversations yet
+                  {convTab === "active" ? "No conversations yet" : "No archived conversations"}
                 </p>
               ) : (
-                conversations.map((c) => (
+                displayConvs.map((c) => (
                   <div
                     key={c.id}
                     className={`group relative w-full text-left px-3 py-3 hover:bg-sidebar-accent transition-colors cursor-pointer ${
                       activeConversationId === c.id
                         ? "bg-sidebar-accent border-l-2 border-primary"
                         : "border-l-2 border-transparent"
-                    }`}
+                    } ${convTab === "archived" ? "opacity-60" : ""}`}
                     onClick={() => {
                       selectConversation(c.id);
                       if (isMobile) setSidebarOpen(false);
@@ -298,16 +325,29 @@ export default function Chat() {
                           : c.title}
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteTarget(c.id);
-                          }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/20"
-                          aria-label="Delete conversation"
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </button>
+                        {convTab === "active" ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleArchive(c.id);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-sidebar-accent"
+                            aria-label="Archive conversation"
+                          >
+                            <Archive className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              restoreMutation.mutate(c.id);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-sidebar-accent"
+                            aria-label="Restore conversation"
+                          >
+                            <ArchiveRestore className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+                        )}
                         <Badge
                           variant="secondary"
                           className="text-[10px] bg-sidebar-accent text-sidebar-foreground"
@@ -316,11 +356,18 @@ export default function Chat() {
                         </Badge>
                       </div>
                     </div>
-                    <span className="text-[11px] text-sidebar-foreground/50">
-                      {formatDistanceToNow(new Date(c.last_message_at), {
-                        addSuffix: true,
-                      })}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-sidebar-foreground/50">
+                        {formatDistanceToNow(new Date(c.last_message_at), {
+                          addSuffix: true,
+                        })}
+                      </span>
+                      {c.total_cost_usd > 0 && (
+                        <span className="text-[10px] text-sidebar-foreground/40">
+                          ${c.total_cost_usd.toFixed(3)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))
               )}

@@ -24,11 +24,23 @@ export interface LocalMessage {
   task_id?: string;
 }
 
-export function useConversations() {
+export function useConversations(archived = false) {
   return useQuery<Conversation[]>({
-    queryKey: ["conversations"],
-    queryFn: () => api.get<Conversation[]>("/chat/conversations"),
+    queryKey: ["conversations", archived ? "archived" : "active"],
+    queryFn: () => api.get<Conversation[]>(archived ? "/chat/conversations?archived=true" : "/chat/conversations"),
     refetchInterval: 15000,
+  });
+}
+
+export function useRestoreConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/chat/conversations/${id}/restore`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("Conversation restored");
+    },
+    onError: () => toast.error("Failed to restore conversation"),
   });
 }
 
