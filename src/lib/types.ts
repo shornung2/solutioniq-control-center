@@ -151,6 +151,7 @@ export interface Conversation {
   message_count: number;
   total_cost_usd: number;
   is_active: boolean;
+  is_deleted?: boolean;
   created_at: string;
   last_message_at: string;
 }

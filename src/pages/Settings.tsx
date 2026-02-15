@@ -7,22 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { api, API_URL, WS_URL } from "@/lib/api";
 import { useConnectionStatus } from "@/hooks/use-connection-status";
+import { usePreferences } from "@/hooks/use-preferences";
 import { CheckCircle2, XCircle } from "lucide-react";
-import type { Capability, SkillLibrary, SkillLibraryItem, InstalledSkill, HealthDeep } from "@/lib/types";
-
-const CATEGORIES = ["all", "research", "documents", "creative", "communication", "knowledge", "browser"] as const;
-
-const CATEGORY_COLORS: Record<string, string> = {
-  research: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  documents: "bg-green-500/10 text-green-500 border-green-500/20",
-  creative: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-  communication: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-  knowledge: "bg-gray-500/10 text-gray-500 border-gray-500/20",
-  browser: "bg-orange-500/10 text-orange-500 border-orange-500/20",
-};
+import type { Capability, HealthDeep } from "@/lib/types";
 
 const TOOLS_CONFIG = [
   { key: "web_search", label: "Web Search", alwaysAvailable: false },
@@ -35,22 +27,11 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isConnected = useConnectionStatus();
-  const [notifications, setNotifications] = useState(true);
-  const [activeCategory, setActiveCategory] = useState<string>("all");
+  const { prefs, update } = usePreferences();
 
   const { data: capabilities = [], isLoading: capLoading } = useQuery<Capability[]>({
     queryKey: ["capabilities"],
     queryFn: () => api.get<Capability[]>("/capabilities"),
-  });
-
-  const { data: skillsLibrary, isLoading: skillsLoading } = useQuery<SkillLibrary>({
-    queryKey: ["skills-library"],
-    queryFn: () => api.get<SkillLibrary>("/skills/library"),
-  });
-
-  const { data: installedSkills = [], isLoading: installedLoading } = useQuery<InstalledSkill[]>({
-    queryKey: ["skills-installed"],
-    queryFn: () => api.get<InstalledSkill[]>("/skills/installed"),
   });
 
   const { data: healthDeep, isLoading: healthLoading } = useQuery<HealthDeep>({
@@ -58,51 +39,9 @@ export default function SettingsPage() {
     queryFn: () => api.get<HealthDeep>("/health/deep"),
   });
 
-  const installedMap = useMemo(() => {
-    const map = new Map<string, string>();
-    installedSkills.forEach((s) => map.set(s.name, s.id));
-    return map;
-  }, [installedSkills]);
-
-  const installMutation = useMutation({
-    mutationFn: (name: string) => api.post(`/skills/${name}/install`, {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["skills-installed"] });
-      toast({ title: "Skill installed", description: "The skill has been activated." });
-    },
-  });
-
-  const uninstallMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/skills/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["skills-installed"] });
-      toast({ title: "Skill uninstalled", description: "The skill has been deactivated." });
-    },
-  });
-
-  const isMutating = installMutation.isPending || uninstallMutation.isPending;
-
-  const skillsList = useMemo(() => {
-    if (!skillsLibrary) return [];
-    const all = Object.values(skillsLibrary);
-    if (activeCategory === "all") return all;
-    return all.filter((s) => s.category === activeCategory);
-  }, [skillsLibrary, activeCategory]);
-
-  const handleToggle = (skill: SkillLibraryItem, isInstalled: boolean) => {
-    if (isInstalled) {
-      const id = installedMap.get(skill.name);
-      if (id) uninstallMutation.mutate(id);
-    } else {
-      installMutation.mutate(skill.name);
-    }
-  };
-
   const save = () => {
     toast({ title: "Settings saved", description: "Your preferences have been updated." });
   };
-
-  const isSkillsLoading = skillsLoading || installedLoading;
 
   return (
     <Layout>
@@ -130,63 +69,53 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Skills Marketplace */}
+        {/* Preferences */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-heading">Skills Marketplace</CardTitle>
+            <CardTitle className="text-sm font-heading">Preferences</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-1">
-              {CATEGORIES.map((cat) => (
-                <Button
-                  key={cat}
-                  size="sm"
-                  variant={activeCategory === cat ? "secondary" : "ghost"}
-                  className="capitalize text-xs h-7"
-                  onClick={() => setActiveCategory(cat)}
-                >
-                  {cat}
-                </Button>
-              ))}
+          <CardContent className="space-y-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm">Task Notifications</p>
+                <p className="text-xs text-muted-foreground">Get notified on task completions and failures</p>
+              </div>
+              <Switch checked={prefs.notificationsEnabled} onCheckedChange={(v) => update({ notificationsEnabled: v })} />
             </div>
-
-            {isSkillsLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
-                ))}
+            <div className="space-y-2">
+              <Label>Budget Alert Threshold: {prefs.budgetAlertThreshold}%</Label>
+              <Slider
+                value={[prefs.budgetAlertThreshold]}
+                onValueChange={([v]) => update({ budgetAlertThreshold: v })}
+                min={50}
+                max={100}
+                step={5}
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>50%</span>
+                <span>100%</span>
               </div>
-            ) : skillsList.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No skills available</p>
-            ) : (
-              <div className="space-y-3">
-                {skillsList.map((skill) => {
-                  const isInstalled = installedMap.has(skill.name);
-                  return (
-                    <div key={skill.name} className="flex items-start justify-between gap-4 py-3 border-b border-border last:border-0">
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium">{skill.name.replace(/_/g, " ")}</span>
-                          <Badge variant="outline" className={CATEGORY_COLORS[skill.category] || ""}>
-                            {skill.category}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {skill.preferred_lane}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">{skill.description}</p>
-                        <p className="text-xs text-muted-foreground">${skill.estimated_cost.toFixed(2)}/use</p>
-                      </div>
-                      <Switch
-                        checked={isInstalled}
-                        disabled={isMutating}
-                        onCheckedChange={() => handleToggle(skill, isInstalled)}
-                      />
-                    </div>
-                  );
-                })}
+            </div>
+            <div className="space-y-2">
+              <Label>Default Task Priority</Label>
+              <Select value={String(prefs.defaultTaskPriority)} onValueChange={(v) => update({ defaultTaskPriority: Number(v) })}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 4, 5].map((p) => (
+                    <SelectItem key={p} value={String(p)}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm">Auto-archive Completed Tasks</p>
+                <p className="text-xs text-muted-foreground">Automatically archive tasks when completed</p>
               </div>
-            )}
+              <Switch checked={prefs.autoArchiveCompleted} onCheckedChange={(v) => update({ autoArchiveCompleted: v })} />
+            </div>
           </CardContent>
         </Card>
 
@@ -254,21 +183,6 @@ export default function SettingsPage() {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-heading">Notifications</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm">Task Notifications</p>
-                <p className="text-xs text-muted-foreground">Get notified on task completions and failures</p>
-              </div>
-              <Switch checked={notifications} onCheckedChange={setNotifications} />
-            </div>
           </CardContent>
         </Card>
 

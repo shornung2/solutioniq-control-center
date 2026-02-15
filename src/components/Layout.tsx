@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Header } from "@/components/Header";
 import { WelcomeDialog } from "@/components/WelcomeDialog";
+import { CommandPalette } from "@/components/CommandPalette";
 import { useTheme } from "@/hooks/use-theme";
 import { useConnectionStatus } from "@/hooks/use-connection-status";
 import { useBudgetUsage } from "@/hooks/use-dashboard";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { AlertTriangle, X } from "lucide-react";
 
 interface LayoutProps {
@@ -17,6 +20,12 @@ function LayoutInner({ children }: LayoutProps) {
   const { status, healthData, isDegraded } = useConnectionStatus();
   const { data: budget } = useBudgetUsage();
   const [budgetDismissed, setBudgetDismissed] = useState(false);
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const toggleCmd = useCallback(() => setCmdOpen((o) => !o), []);
+  const goNewTask = useCallback(() => navigate("/tasks"), [navigate]);
+  useKeyboardShortcuts({ onCommandPalette: toggleCmd, onNewTask: goNewTask });
 
   const budgetWarning = !budgetDismissed && budget && (budget.daily_pct > 90 || budget.monthly_pct > 90);
   const warningLabel = budget && budget.daily_pct > 90
@@ -54,6 +63,7 @@ function LayoutInner({ children }: LayoutProps) {
         </div>
       </div>
       <WelcomeDialog />
+      <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
     </SidebarProvider>
   );
 }

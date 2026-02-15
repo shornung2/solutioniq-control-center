@@ -1,4 +1,5 @@
 import { Moon, Sun, User } from "lucide-react";
+import { NotificationCenter } from "@/components/NotificationCenter";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -92,6 +93,7 @@ export function Header({ theme, toggleTheme, status, healthData }: HeaderProps) 
       </div>
 
       <div className="flex items-center gap-2">
+        <NotificationCenter />
         <Button variant="ghost" size="icon" onClick={toggleTheme}>
           {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
