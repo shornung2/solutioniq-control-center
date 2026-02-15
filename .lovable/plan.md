@@ -1,204 +1,114 @@
 
-
-# Comprehensive Enhancement: Health, Conversations, Skills, UI/UX, and Advanced Features
+# Comprehensive Testing Suite
 
 ## Overview
 
-Implement all 5 feature areas across the application: System Health monitoring page, Conversation management with soft delete/archive, Skills Marketplace page, UI/UX improvements (code splitting, keyboard shortcuts, notification center), and Advanced Features (bulk operations, global search, export, user preferences). All features connect to the existing external VPS API -- no database tables needed since data is managed by the backend.
+Add unit tests, integration tests, and validation tests covering the new features: file services, feedback system, budget monitor, routing performance, WebSocket handling, preferences, debounce hook, and form validation logic. All tests use the existing Vitest + React Testing Library setup.
 
----
+## Test Files
 
-## 1. System Health Monitoring
+### 1. `src/services/__tests__/fileService.test.ts` -- File Service Unit Tests
 
-### New Page: `src/pages/SystemStatus.tsx`
-- Full-page health dashboard with auto-refresh every 30 seconds
-- Service cards for Database, Redis, LLM Providers showing status, latency
-- Overall status badge (healthy/degraded/unhealthy)
-- Last updated timestamp
-- Uses existing `useConnectionStatus()` hook and `/health/deep` endpoint data
+- **validateFile**: Test allowed types (image/png, application/pdf, text/plain, application/json) return null
+- **validateFile**: Test rejected types (application/zip, video/mp4, empty string) return error message
+- **validateFile**: Test file at exactly 100MB passes, file over 100MB fails
+- **validateFile**: Test file with empty/missing type returns error
+- **uploadFile**: Mock `api.upload` and verify FormData is constructed with the file
+- **listFiles**: Mock `api.get`, verify default limit/offset params
+- **deleteFileById**: Mock `api.delete`, verify correct endpoint called
 
-### Navigation Update
-- Add "System Status" route to `src/App.tsx` at `/system-status`
-- Add nav item in `src/components/AppSidebar.tsx` with Activity icon
+### 2. `src/services/__tests__/feedbackService.test.ts` -- Feedback Service Unit Tests
 
----
+- **submit**: Mock `api.post`, verify payload structure with required and optional fields
+- **getForTask**: Mock `api.get`, verify endpoint includes task ID
+- **getStats**: Mock `api.get`, verify correct endpoint
 
-## 2. Conversation Management Enhancements
+### 3. `src/hooks/__tests__/use-debounce.test.ts` -- Debounce Hook Tests
 
-### Updated Chat Page (`src/pages/Chat.tsx`)
-- Add Active/Archived tabs in conversation sidebar
-- Conversations with `is_deleted: true` show in Archived tab
-- Archive button (soft delete via existing `DELETE /chat/conversations/{id}`)
-- Restore button in archived view via `POST /chat/conversations/{id}/restore` (or a PUT)
-- Show `total_cost_usd` on each conversation card
-- Bulk archive: multi-select with checkboxes, then "Archive Selected" button
-- Undo toast notification after archive using sonner's `toast()` with action
+- Returns initial value immediately
+- Updates after delay expires (use `vi.useFakeTimers`)
+- Resets timer when value changes before delay
+- Works with custom delay values
 
-### Updated Types (`src/lib/types.ts`)
-- Add `is_deleted?: boolean` to `Conversation` interface
+### 4. `src/hooks/__tests__/use-preferences.test.ts` -- Preferences Hook Tests
 
-### Updated Hook (`src/hooks/use-chat.ts`)
-- Add `useArchivedConversations()` query fetching `/chat/conversations?archived=true`
-- Add `restoreConversation(id)` function
+- Returns default values when localStorage is empty
+- Loads saved values from localStorage
+- `update()` merges partial updates and persists
+- Handles corrupted localStorage JSON gracefully (returns defaults)
 
----
+### 5. `src/components/__tests__/BudgetMonitor.test.tsx` -- Budget Monitor Component Tests
 
-## 3. Skills Marketplace (Dedicated Page)
+- Renders loading skeleton when data is loading
+- Renders null when no budget data
+- Shows daily and monthly percentages
+- Shows dollar amounts (used/limit)
+- Shows "Paused" badge when `is_paused` is true
+- Shows "Hard Stop" badge when `hard_stop_enabled` is true
+- Shows warning banner when pct > 90
+- Does not show warning when pct < 75
 
-### New Page: `src/pages/Skills.tsx`
-- Full-page skills marketplace (move the marketplace card from Settings into its own page)
-- Grid layout of skill cards with search and category filtering
-- Skill detail modal with full description, version, author, tags
-- Install/Uninstall toggle per skill
-- Usage stats section showing last used timestamp for installed skills
+### 6. `src/components/__tests__/FeedbackStars.test.tsx` -- FeedbackStars Component Tests
 
-### New Component: `src/components/SkillCard.tsx`
-- Card with skill name, version, category badge, description
-- Tags displayed as small badges
-- Install/Uninstall button with loading state
-- Author attribution and estimated cost per use
+- Renders 5 star buttons
+- Clicking a star calls submitFeedback mutation
+- Shows "Thanks!" message after selection
+- Has correct ARIA radiogroup role
+- Stars get color classes based on rating (red for 1-2, yellow for 3, green for 4-5)
 
-### Navigation Update
-- Add "Skills" route to `src/App.tsx` at `/skills`
-- Add nav item in `src/components/AppSidebar.tsx` with Puzzle icon
-- Remove the skills marketplace section from Settings page
+### 7. `src/hooks/__tests__/use-websocket.test.ts` -- WebSocket Hook Tests
 
----
+- Initializes connection and sets isConnected on open
+- Sends auth token on connection
+- Parses incoming JSON events and sets lastEvent
+- Handles reconnection with exponential backoff
+- registerPendingTask and removePendingTask modify the set
 
-## 4. UI/UX Improvements
+### 8. `src/lib/__tests__/validation.test.ts` -- Validation Logic Tests
 
-### Code Splitting (`src/App.tsx`)
-- Use `React.lazy()` and `Suspense` for all page components
-- Add a loading fallback spinner component
-
-### Keyboard Shortcuts
-- New hook: `src/hooks/use-keyboard-shortcuts.ts`
-- Cmd/Ctrl+K: opens command palette (using existing cmdk dependency)
-- Cmd/Ctrl+N: navigate to create task
-- Esc: close modals
-- Register shortcuts in Layout component
-
-### Command Palette: `src/components/CommandPalette.tsx`
-- Uses the `cmdk` package (already installed)
-- Global search across pages
-- Quick navigation to any page
-- Quick actions: new task, new conversation, upload file
-
-### Notification Center: `src/components/NotificationCenter.tsx`
-- Bell icon in Header with unread count badge
-- Dropdown showing recent notifications (stored in local state from WebSocket events)
-- Mark as read functionality
-- Click to navigate to relevant item
-- Stores up to 50 recent notifications in-memory
-
-### Debounced Search
-- New utility hook: `src/hooks/use-debounce.ts`
-- Apply to all search inputs (Files, Skills, Tasks) with 300ms debounce
-
-### Mobile Improvements
-- Ensure modals use `max-h-[90vh]` on mobile
-- Touch-friendly button sizes already at 44px via shadcn defaults
-
----
-
-## 5. Advanced Features
-
-### Global Search (`src/components/GlobalSearch.tsx`)
-- Integrated into the Command Palette
-- Searches across tasks (`/tasks?search=`), conversations, and files
-- Shows results grouped by type with icons
-
-### Export Functionality
-- Task export: CSV button on Tasks page (similar to existing analytics CSV export)
-- Conversation export: Download conversation history as text/markdown
-
-### User Preferences (`src/pages/Settings.tsx`)
-- New "Preferences" card in Settings with:
-  - Notification toggle (already exists, keep it)
-  - Budget alert threshold slider (default 90%)
-  - Default task priority selector
-  - Auto-archive completed tasks toggle
-- Store preferences in `localStorage` via a `usePreferences()` hook
-
-### Bulk Operations on Tasks Page
-- Checkbox column in task table for multi-select
-- "Select All" checkbox in header
-- Bulk actions bar: Delete selected, Export selected
-- Confirmation dialog for bulk delete
-
----
+- Rating values must be 1-5 (test boundary: 0, 1, 5, 6)
+- Required fields enforcement (task_id, rating cannot be empty)
+- File type validation edge cases (uppercase MIME types, compound types)
+- Budget percentage boundaries (0, 75, 90, 100, values above 100)
 
 ## Technical Details
 
-### File Changes Summary
+### Mocking Strategy
 
-**New Files (11):**
-- `src/pages/SystemStatus.tsx` -- Health monitoring dashboard
-- `src/pages/Skills.tsx` -- Skills marketplace page
-- `src/components/SkillCard.tsx` -- Skill display card
-- `src/components/CommandPalette.tsx` -- Cmd+K command palette
-- `src/components/NotificationCenter.tsx` -- Bell icon notification dropdown
-- `src/components/GlobalSearch.tsx` -- Search results in command palette
-- `src/hooks/use-keyboard-shortcuts.ts` -- Keyboard shortcut registration
-- `src/hooks/use-debounce.ts` -- Debounced value hook
-- `src/hooks/use-preferences.ts` -- localStorage preferences hook
-- `src/components/LoadingFallback.tsx` -- Suspense fallback spinner
-- `src/components/BulkActionBar.tsx` -- Floating bar for bulk operations
+- Mock `@/lib/api` module using `vi.mock()` for all service tests
+- Mock `@tanstack/react-query` hooks for component tests that use queries
+- Use `vi.useFakeTimers()` for debounce and WebSocket reconnection tests
+- Mock `localStorage` for preferences tests
+- Mock `WebSocket` global for WebSocket hook tests
 
-**Modified Files (8):**
-- `src/App.tsx` -- Add routes, React.lazy, Suspense
-- `src/components/AppSidebar.tsx` -- Add Skills and System Status nav items
-- `src/components/Header.tsx` -- Add NotificationCenter
-- `src/components/Layout.tsx` -- Add CommandPalette and keyboard shortcuts
-- `src/pages/Chat.tsx` -- Archive/restore, bulk archive, cost display
-- `src/pages/Tasks.tsx` -- Bulk select, CSV export
-- `src/pages/Settings.tsx` -- Move skills to own page, add preferences card
-- `src/lib/types.ts` -- Add is_deleted to Conversation
-- `src/hooks/use-chat.ts` -- Add archived conversations query, restore function
+### Test Utilities
 
-### Keyboard Shortcuts Implementation
-
+Each component test wraps renders in necessary providers:
 ```text
-Cmd/Ctrl + K  -->  Toggle CommandPalette open/close
-Cmd/Ctrl + N  -->  Navigate to /tasks and open create dialog
-Esc           -->  Close CommandPalette if open
+QueryClientProvider (with new QueryClient per test)
 ```
 
-Registered via `useEffect` in Layout, using `e.metaKey || e.ctrlKey` for cross-platform support.
-
-### Notification Center Data Flow
-
+### File Structure
 ```text
-WebSocket event received
-  --> WebSocketContext dispatches toast (existing)
-  --> Also pushes to NotificationCenter's in-memory array
-  --> NotificationCenter shows unread count badge
-  --> User clicks bell to see list
-  --> Click on item navigates to relevant page
+src/
+  services/
+    __tests__/
+      fileService.test.ts
+      feedbackService.test.ts
+  hooks/
+    __tests__/
+      use-debounce.test.ts
+      use-preferences.test.ts
+      use-websocket.test.ts
+  components/
+    __tests__/
+      BudgetMonitor.test.tsx
+      FeedbackStars.test.tsx
+  lib/
+    __tests__/
+      validation.test.ts
 ```
 
-Notifications stored in React state (no persistence needed), limited to last 50 entries.
+### Total: 8 test files covering ~45 individual test cases
 
-### Code Splitting Pattern
-
-```text
-const Dashboard = React.lazy(() => import("./pages/Dashboard"));
-const Analytics = React.lazy(() => import("./pages/Analytics"));
-// ... all pages
-
-<Suspense fallback={<LoadingFallback />}>
-  <Routes>...</Routes>
-</Suspense>
-```
-
-### Preferences Storage
-
-```text
-localStorage key: "solutioniq_preferences"
-Value: JSON with fields:
-  - budgetAlertThreshold: number (default 90)
-  - defaultTaskPriority: number (default 3)
-  - autoArchiveCompleted: boolean (default false)
-  - notificationsEnabled: boolean (default true)
-```
-
+All tests run via the existing `vitest run` command with no config changes needed.
