@@ -4,14 +4,16 @@ import { WS_URL, AUTH_TOKEN } from "@/lib/api";
 import type { FileAttachment } from "@/lib/types";
 
 export interface WsTaskEvent {
-  type: "task.completed" | "task.failed";
-  task_id: string;
+  type: "task.completed" | "task.failed" | "budget.alert" | "task.awaiting_approval" | "message.created";
+  task_id?: string;
   result?: {
     content?: string;
     model?: string;
     cost_usd?: number;
     files?: FileAttachment[];
   };
+  message?: string;
+  severity?: "warning" | "critical";
 }
 
 export interface UseWebSocketReturn {
