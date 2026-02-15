@@ -1,102 +1,116 @@
 
 
-# Feedback System Integration
+# Enhanced Analytics Dashboard and Real-Time WebSocket Events
 
 ## Overview
 
-Build a comprehensive feedback system that lets users rate completed tasks, leave detailed comments, and view aggregated feedback statistics. This builds on the existing `FeedbackStars` component and extends it with a proper modal, a dedicated stats component, and integration into the Tasks and Analytics pages.
+Upgrade the analytics dashboard with dedicated Budget Monitor and Routing Performance components, add a cost breakdown pie chart with CSV export, and extend the existing WebSocket system to handle budget alerts and additional event types with toast notifications and query invalidation.
 
 ## Changes
 
-### 1. New Types (`src/lib/types.ts`)
+### 1. New Component: Budget Monitor (`src/components/BudgetMonitor.tsx`)
 
-Add `TaskFeedback` and `FeedbackStats` interfaces:
-- `TaskFeedback`: task_id, rating (1-5), optional accuracy/speed/helpfulness ratings, comment, created_at
-- `FeedbackStats`: average_rating, total_feedback, rating_distribution (Record of star count to number)
+A dedicated card with two circular progress indicators (daily and monthly usage):
+- Circular progress rings rendered with SVG circles (stroke-dasharray technique)
+- Color coding: green (<75%), yellow (75-90%), red (>90%)
+- Dollar amounts formatted as "used / limit"
+- Warning banner when either daily or monthly exceeds 90%
+- "Paused" badge using existing Badge component when `is_paused` is true
+- "Hard Stop" indicator badge when `hard_stop_enabled` is true
+- Data sourced from existing `useBudgetUsage()` hook (endpoint: `/usage/budget`)
 
-### 2. New Feedback Service (`src/services/feedbackService.ts`)
+### 2. New Component: Routing Performance (`src/components/RoutingPerformance.tsx`)
 
-Centralized service with:
-- `submitFeedback(data)` -- POST to `/feedback`
-- `getTaskFeedback(taskId)` -- GET `/feedback/task/{id}`
-- `getFeedbackStats()` -- GET `/feedback/stats`
+A card with three lane columns (Green, Yellow, Red):
+- Each column shows: task count, success rate (with color-coded badge), average tokens, and feedback rating stars
+- Lane colors: green-500, yellow-500, red-500 backgrounds with appropriate opacity
+- Success rate visual: badge with green/yellow/red coloring based on threshold
+- Feedback stars: inline filled/unfilled star icons
+- Data from existing `useAnalyticsRouting()` hook
 
-Plus a React Query hook file `src/hooks/use-feedback.ts` with:
-- `useTaskFeedback(taskId)` -- fetches existing feedback for a task
-- `useFeedbackStats()` -- fetches aggregated stats
-- `useSubmitFeedback()` -- mutation to submit/update feedback
+### 3. Enhanced Cost Breakdown in Analytics Page
 
-### 3. Feedback Modal (`src/components/FeedbackModal.tsx`)
+Add to the existing Analytics page:
+- **Pie chart** showing cost distribution by model using recharts `PieChart` and `Pie` components (already installed)
+- **CSV Export button**: generates a CSV from `by_day` cost data and triggers download via blob URL
+- Both placed in a new row below the existing "Cost by Model" bar chart
 
-A Dialog component triggered when viewing a completed task:
-- **Primary rating**: 5-star interactive selector with hover effects and color coding (red for 1-2, yellow for 3, green for 4-5)
-- **Detailed ratings**: Optional sliders for accuracy, speed, helpfulness (1-5 scale each)
-- **Comment**: Textarea for free-form feedback
-- **Actions**: Submit button with loading state, Skip button to dismiss
-- **Pre-fill**: If feedback already exists for this task, pre-populate the form for editing
-- Smooth star selection animation using framer-motion (already installed)
+### 4. Dashboard Header Budget Widget
 
-### 4. Updated FeedbackStars Component (`src/components/FeedbackStars.tsx`)
+Add a compact budget summary to the Dashboard page:
+- Small inline display showing daily and monthly percentages with color dots
+- Links to the Analytics page for full details
+- Uses existing `useBudgetUsage()` hook already imported in Dashboard
 
-Refactor the existing component to:
-- Use the new `feedbackService` instead of raw `api.post` calls
-- Use the correct endpoint (`/feedback` instead of `/chat/{taskId}/feedback`)
-- Add color coding: stars turn red (1-2), yellow (3), or green (4-5) after selection
-- Add keyboard navigation (arrow keys to select, Enter to confirm)
+### 5. Extended WebSocket Event Handling (`src/hooks/use-websocket.ts`)
 
-### 5. Feedback Stats Component (`src/components/FeedbackStats.tsx`)
+Expand the `WsTaskEvent` type to include new event types:
+- `budget.alert` -- triggers a toast warning and invalidates the `["budget"]` query
+- `task.awaiting_approval` -- triggers a toast and invalidates the `["approvals"]` query
+- `message.created` -- invalidates the `["chat-history"]` query for live chat updates
 
-A card component showing:
-- Large average rating display with filled stars
-- Rating distribution as horizontal bar segments (1-5 stars with count and percentage)
-- Total feedback count
-- Color-coded bars matching the star rating colors
+Add a callback system so consuming components can register event handlers:
+- New `onEvent` callback ref in the hook
+- `useEffect` in consuming components (Chat, Tasks) to react to relevant events
 
-### 6. Task Detail Updates (`src/pages/Tasks.tsx`)
+### 6. Budget Alert Banner (`src/components/Layout.tsx`)
 
-In the existing task detail Dialog:
-- For completed tasks, show a "Rate this task" button that opens the FeedbackModal
-- If feedback already exists, display the rating inline with an "Edit" button
-- Show the FeedbackStars inline below the task result section
-- Add a small star indicator on task rows in the table for tasks that have been rated
+Add a dismissible alert banner at the top of the Layout when budget exceeds 90%:
+- Uses the `Alert` component from shadcn/ui
+- Shows "Budget Warning: You have used X% of your daily/monthly budget"
+- Dismiss button that hides until next threshold crossing
+- Data from `useBudgetUsage()` hook
 
-### 7. Analytics Integration (`src/pages/Analytics.tsx`)
+### 7. Toast Notifications for WebSocket Events
 
-Add a new card in the analytics grid:
-- "Feedback Overview" card using the `FeedbackStats` component
-- Placed alongside the existing routing performance section
-- Shows overall satisfaction metrics
+In `src/contexts/WebSocketContext.tsx`, add an effect that shows toast notifications:
+- `task.completed` -- success toast with task ID
+- `task.failed` -- destructive toast with error info
+- `budget.alert` -- warning toast with link to analytics
+- Uses existing `sonner` toast library
+
+---
 
 ## Technical Details
 
-### API Endpoints
+### Circular Progress (Budget Monitor)
 
-All calls go through the existing `api` helper in `src/lib/api.ts`:
-- `POST /feedback` with body `{ task_id, rating, accuracy_rating?, speed_rating?, helpfulness_rating?, comment? }`
-- `GET /feedback/task/{id}` returns `TaskFeedback | null`
-- `GET /feedback/stats` returns `FeedbackStats`
+SVG-based rings using:
+```text
+circumference = 2 * PI * radius
+strokeDasharray = `${pct * circumference / 100} ${circumference}`
+```
+Two concentric circles: one for daily (inner), one for monthly (outer).
 
-### Star Color Logic
+### CSV Export
 
 ```text
-rating 1-2: text-red-500 fill-red-500
-rating 3:   text-yellow-500 fill-yellow-500
-rating 4-5: text-green-500 fill-green-500
+1. Map by_day array to "Date,Cost" rows
+2. Create Blob with text/csv type
+3. Create object URL and trigger download
+4. Revoke URL after download
 ```
 
-### Keyboard Navigation
+### WebSocket Event Type Extension
 
-Stars support arrow-left/right to move selection and Enter/Space to confirm, following WAI-ARIA practices for radio groups.
+Current types: `task.completed`, `task.failed`
+New types: `budget.alert`, `task.awaiting_approval`, `message.created`
+
+The `onmessage` handler will be updated to parse `parsed.event` more broadly and dispatch to the `setLastEvent` state. Consuming components filter by `lastEvent.type`.
+
+### Query Invalidation on Events
+
+In `WebSocketProvider`, add a `useEffect` watching `lastEvent` that calls `queryClient.invalidateQueries` for the relevant query keys based on event type. This provides real-time data refresh without polling.
 
 ### Files Created
-- `src/services/feedbackService.ts` -- API calls
-- `src/hooks/use-feedback.ts` -- React Query hooks
-- `src/components/FeedbackModal.tsx` -- Full feedback dialog
-- `src/components/FeedbackStats.tsx` -- Stats display card
+- `src/components/BudgetMonitor.tsx` -- Circular progress budget display
+- `src/components/RoutingPerformance.tsx` -- Three-lane routing card
 
 ### Files Modified
-- `src/lib/types.ts` -- Add TaskFeedback and FeedbackStats types
-- `src/components/FeedbackStars.tsx` -- Refactor to use service, add colors and keyboard nav
-- `src/pages/Tasks.tsx` -- Add feedback display and modal trigger in task detail
-- `src/pages/Analytics.tsx` -- Add feedback stats card
+- `src/hooks/use-websocket.ts` -- Extended event types
+- `src/contexts/WebSocketContext.tsx` -- Toast notifications and query invalidation
+- `src/pages/Analytics.tsx` -- Pie chart, CSV export, new components
+- `src/pages/Dashboard.tsx` -- Budget widget in header area
+- `src/components/Layout.tsx` -- Budget alert banner
+- `src/lib/types.ts` -- Extended WebSocket event types if needed
 
