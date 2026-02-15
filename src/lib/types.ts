@@ -227,3 +227,19 @@ export interface HealthDeepResponse {
   redis: { status: string; latency_ms: number | null };
   llm_providers: Record<string, string>;
 }
+
+export interface TaskFeedback {
+  task_id: string;
+  rating: number;
+  accuracy_rating?: number;
+  speed_rating?: number;
+  helpfulness_rating?: number;
+  comment?: string;
+  created_at: string;
+}
+
+export interface FeedbackStats {
+  average_rating: number;
+  total_feedback: number;
+  rating_distribution: Record<number, number>;
+}

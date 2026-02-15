@@ -9,8 +9,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { AlertCircle, Plus, Loader2 } from "lucide-react";
+import { AlertCircle, Plus, Loader2, Star } from "lucide-react";
 import { useTasks, useCreateTask, useTaskTrace } from "@/hooks/use-tasks";
+import { useTaskFeedback } from "@/hooks/use-feedback";
+import { FeedbackModal } from "@/components/FeedbackModal";
+import { FeedbackStars } from "@/components/FeedbackStars";
 import type { Task } from "@/lib/types";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -24,11 +27,13 @@ export default function Tasks() {
   const [filter, setFilter] = useState("all");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [feedbackTaskId, setFeedbackTaskId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newPriority, setNewPriority] = useState([3]);
   const { data: tasks = [], isLoading, isError, refetch } = useTasks(filter);
   const createTask = useCreateTask();
   const { data: trace, isLoading: traceLoading } = useTaskTrace(selectedTask?.id || null);
+  const { data: selectedFeedback } = useTaskFeedback(selectedTask?.id || null);
 
   const handleCreate = () => {
     if (!newTitle.trim()) return;
@@ -151,6 +156,59 @@ export default function Tasks() {
                 </div>
               )}
 
+              {/* Feedback Section */}
+              {selectedTask?.status === "completed" && (
+                <div className="border-t border-border pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground font-medium">Feedback:</span>
+                    {selectedFeedback ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-0.5">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              size={14}
+                              className={
+                                s <= selectedFeedback.rating
+                                  ? selectedFeedback.rating <= 2
+                                    ? "text-red-500 fill-red-500"
+                                    : selectedFeedback.rating === 3
+                                      ? "text-yellow-500 fill-yellow-500"
+                                      : "text-green-500 fill-green-500"
+                                  : "text-muted-foreground/30"
+                              }
+                            />
+                          ))}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-xs px-2"
+                          onClick={() => setFeedbackTaskId(selectedTask.id)}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => setFeedbackTaskId(selectedTask.id)}
+                      >
+                        <Star className="h-3 w-3" /> Rate
+                      </Button>
+                    )}
+                  </div>
+                  {selectedFeedback?.comment && (
+                    <p className="mt-1 text-xs text-muted-foreground italic">"{selectedFeedback.comment}"</p>
+                  )}
+                  {!selectedFeedback && (
+                    <FeedbackStars taskId={selectedTask.id} />
+                  )}
+                </div>
+              )}
+
               {/* Execution Trace */}
               <div>
                 <span className="text-muted-foreground font-medium">Execution Trace:</span>
@@ -178,6 +236,13 @@ export default function Tasks() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Feedback Modal */}
+        <FeedbackModal
+          taskId={feedbackTaskId}
+          open={!!feedbackTaskId}
+          onOpenChange={(open) => !open && setFeedbackTaskId(null)}
+        />
 
         {/* Create Task Modal */}
         <Dialog open={showCreate} onOpenChange={setShowCreate}>
