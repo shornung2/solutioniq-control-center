@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { DollarSign, TrendingUp, Calendar, Gauge, AlertCircle, Star } from "lucide-react";
+import { useState, useCallback } from "react";
+import { DollarSign, TrendingUp, Calendar, Gauge, AlertCircle, Star, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Layout } from "@/components/Layout";
@@ -7,35 +7,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
+  ChartContainer, ChartTooltip, ChartTooltipContent,
 } from "@/components/ui/chart";
 import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { useAnalyticsSummary, useAnalyticsCosts, useAnalyticsRouting } from "@/hooks/use-analytics";
 import { FeedbackStats } from "@/components/FeedbackStats";
+import { BudgetMonitor } from "@/components/BudgetMonitor";
+import { RoutingPerformance } from "@/components/RoutingPerformance";
 
 const MODEL_COLORS: Record<string, string> = {
   haiku: "hsl(142, 71%, 45%)",
   sonnet: "hsl(217, 91%, 60%)",
   opus: "hsl(271, 91%, 65%)",
 };
+const PIE_COLORS = ["hsl(142, 71%, 45%)", "hsl(217, 91%, 60%)", "hsl(271, 91%, 65%)", "hsl(39, 89%, 60%)", "hsl(0, 72%, 51%)"];
 
 const periodOptions = [7, 30, 90] as const;
 
@@ -332,7 +323,64 @@ export default function Analytics() {
           </Card>
         </div>
 
-        {/* Row 4 — Feedback Overview */}
+        {/* Row 4 — Cost Distribution Pie & CSV Export */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-heading">Cost Distribution</CardTitle>
+            </CardHeader>
+            <CardContent className="h-56">
+              {byModelArray.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No model data</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={byModelArray} dataKey="cost" nameKey="model" cx="50%" cy="50%" outerRadius={80} label={({ model, percent }) => `${model} ${(percent * 100).toFixed(0)}%`}>
+                      {byModelArray.map((_, i) => (
+                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => `$${v.toFixed(2)}`} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-heading">Export Data</CardTitle>
+              <Button
+                size="sm" variant="outline" className="gap-1 text-xs"
+                disabled={!costs?.by_day?.length}
+                onClick={() => {
+                  const rows = costs?.by_day ?? [];
+                  const csv = "Date,Cost\n" + rows.map(r => `${r.date},${r.cost}`).join("\n");
+                  const blob = new Blob([csv], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url; a.download = "cost-data.csv";
+                  document.body.appendChild(a); a.click(); a.remove();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                <Download className="h-3 w-3" /> CSV
+              </Button>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              <p>Download daily cost data as CSV for external analysis or reporting.</p>
+              <p className="mt-2 text-xs">{costs?.by_day?.length ?? 0} days of data available</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Row 5 — Budget Monitor & Routing Performance */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <BudgetMonitor />
+          <RoutingPerformance days={days} />
+        </div>
+
+        {/* Row 6 — Feedback Overview */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <FeedbackStats />
         </div>

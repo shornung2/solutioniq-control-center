@@ -73,19 +73,25 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-heading flex items-center gap-2">
-                <Zap className="h-4 w-4 text-primary" /> Token Usage
+                <Zap className="h-4 w-4 text-primary" /> Budget Overview
               </CardTitle>
             </CardHeader>
             <CardContent>
               {budgetLoading ? (
                 <Skeleton className="h-8 w-full" />
               ) : budget ? (
-                <div className="space-y-2">
-                  <Progress value={budgetPercent} className="h-3" />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>{budget.monthly_used.toLocaleString()} used</span>
-                    <span>{budget.monthly_limit.toLocaleString()} limit</span>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className={`h-2.5 w-2.5 rounded-full ${budget.daily_pct > 90 ? "bg-red-500" : budget.daily_pct > 75 ? "bg-yellow-500" : "bg-green-500"}`} />
+                    <span className="text-muted-foreground">Daily</span>
+                    <span className="font-bold ml-auto">{budget.daily_pct.toFixed(1)}%</span>
                   </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className={`h-2.5 w-2.5 rounded-full ${budget.monthly_pct > 90 ? "bg-red-500" : budget.monthly_pct > 75 ? "bg-yellow-500" : "bg-green-500"}`} />
+                    <span className="text-muted-foreground">Monthly</span>
+                    <span className="font-bold ml-auto">{budget.monthly_pct.toFixed(1)}%</span>
+                  </div>
+                  <a href="/analytics" className="text-xs text-primary hover:underline">View details →</a>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No budget data</p>
