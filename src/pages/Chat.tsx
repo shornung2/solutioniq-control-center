@@ -18,6 +18,7 @@ import {
   Mail,
   Swords,
   Trash2,
+  Paperclip,
 } from "lucide-react";
 import { useChat, useConversations, type LocalMessage } from "@/hooks/use-chat";
 import { useWebSocketContext } from "@/contexts/WebSocketContext";
@@ -29,6 +30,8 @@ import { FileCard } from "@/components/FileCard";
 import { ImagePreviewDialog } from "@/components/ImagePreviewDialog";
 import { FeedbackStars } from "@/components/FeedbackStars";
 import { downloadFile } from "@/lib/api";
+import { uploadFile, validateFile } from "@/services/fileService";
+import { useToast } from "@/hooks/use-toast";
 import type { FileAttachment } from "@/lib/types";
 import {
   AlertDialog,
@@ -164,8 +167,11 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [previewFile, setPreviewFile] = useState<FileAttachment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -193,14 +199,34 @@ export default function Chat() {
     }
   };
 
-  // Auto-resize textarea
-  const handleTextareaChange = (
-    e: React.ChangeEvent<HTMLTextAreaElement>
-  ) => {
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
     const el = e.target;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 96) + "px"; // max 3 lines ~96px
+    el.style.height = Math.min(el.scrollHeight, 96) + "px";
+  };
+
+  const handleFileAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    const error = validateFile(file);
+    if (error) {
+      toast({ title: "Invalid file", description: error, variant: "destructive" });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const result = await uploadFile(file);
+      sendMessage(`📎 Attached: ${result.filename}`);
+      toast({ title: "File attached", description: result.filename });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const showEmptyState =
@@ -361,6 +387,25 @@ export default function Chat() {
 
           {/* Input */}
           <div className="border-t border-border p-3 flex gap-2 bg-card">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileAttach}
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading || isSending}
+              title="Attach file"
+            >
+              {isUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Paperclip className="h-4 w-4" />
+              )}
+            </Button>
             <textarea
               ref={textareaRef}
               placeholder="Type a message..."

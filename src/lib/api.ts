@@ -38,6 +38,19 @@ export const api = {
   put: <T>(endpoint: string, body: unknown) =>
     request<T>(endpoint, { method: "PUT", body: JSON.stringify(body) }),
   delete: <T>(endpoint: string) => request<T>(endpoint, { method: "DELETE" }),
+  upload: async <T>(endpoint: string, formData: FormData): Promise<T> => {
+    const url = `${API_URL}${endpoint}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`Upload Error ${res.status}: ${errorText}`);
+    }
+    return res.json() as Promise<T>;
+  },
   healthCheck: async (): Promise<boolean> => {
     try {
       await request("/agent/status");

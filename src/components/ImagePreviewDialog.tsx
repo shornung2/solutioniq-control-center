@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import type { FileAttachment } from "@/lib/types";
-import { downloadFile } from "@/lib/api";
+import { downloadFile, getFilePreviewUrl } from "@/lib/api";
 
 interface ImagePreviewDialogProps {
   file: FileAttachment | null;
@@ -18,10 +18,7 @@ interface ImagePreviewDialogProps {
 export function ImagePreviewDialog({ file, open, onOpenChange }: ImagePreviewDialogProps) {
   if (!file) return null;
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-  // Build a direct URL for image preview via the proxy
-  const imgSrc = `${supabaseUrl}/functions/v1/api-proxy?x-target-path=${encodeURIComponent(`/files/${file.file_id}`)}&x-target-method=GET&apikey=${anonKey}`;
+  const imgSrc = getFilePreviewUrl(file.file_id);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

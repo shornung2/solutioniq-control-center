@@ -118,6 +118,20 @@ export interface FileAttachment {
   size_bytes: number;
 }
 
+export interface FileMetadata {
+  file_id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+  download_url: string;
+}
+
+export interface FileListResponse {
+  files: FileMetadata[];
+  total: number;
+}
+
 export interface ChatSendResponse {
   content: string | null;
   task_id: string;
