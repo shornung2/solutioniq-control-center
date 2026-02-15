@@ -29,6 +29,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { useAnalyticsSummary, useAnalyticsCosts, useAnalyticsRouting } from "@/hooks/use-analytics";
+import { FeedbackStats } from "@/components/FeedbackStats";
 
 const MODEL_COLORS: Record<string, string> = {
   haiku: "hsl(142, 71%, 45%)",
@@ -254,7 +255,6 @@ export default function Analytics() {
                       dataKey="cost"
                       radius={[0, 4, 4, 0]}
                       fill="hsl(var(--primary))"
-                      // Per-bar color via cell rendering
                     >
                       {byModelArray.map((entry, idx) => (
                         <rect
@@ -330,6 +330,11 @@ export default function Analytics() {
               )}
             </CardContent>
           </Card>
+        </div>
+
+        {/* Row 4 — Feedback Overview */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <FeedbackStats />
         </div>
       </div>
     </Layout>

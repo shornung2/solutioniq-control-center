@@ -2,10 +2,16 @@ import { useState, useCallback } from "react";
 import { Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api";
+import { useSubmitFeedback } from "@/hooks/use-feedback";
 
 interface FeedbackStarsProps {
   taskId: string;
+}
+
+function getStarColor(rating: number) {
+  if (rating <= 2) return "text-red-500 fill-red-500";
+  if (rating === 3) return "text-yellow-500 fill-yellow-500";
+  return "text-green-500 fill-green-500";
 }
 
 export function FeedbackStars({ taskId }: FeedbackStarsProps) {
@@ -14,7 +20,7 @@ export function FeedbackStars({ taskId }: FeedbackStarsProps) {
   const [showThanks, setShowThanks] = useState(false);
   const [showFeedbackInput, setShowFeedbackInput] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const submitFeedback = useSubmitFeedback();
 
   const handleClick = useCallback(
     (star: number) => {
@@ -22,30 +28,28 @@ export function FeedbackStars({ taskId }: FeedbackStarsProps) {
         setSelectedStar(star);
         setShowThanks(true);
         setTimeout(() => setShowThanks(false), 2000);
-        api.post(`/chat/${taskId}/feedback`, { rating: star }).catch(() => {});
+        submitFeedback.mutate({ task_id: taskId, rating: star });
       } else {
         setShowFeedbackInput((v) => !v);
       }
     },
-    [selectedStar, taskId]
+    [selectedStar, taskId, submitFeedback]
   );
 
   const handleSubmitFeedback = useCallback(async () => {
     if (!feedbackText.trim() || !selectedStar) return;
-    setSubmitting(true);
-    try {
-      await api.post(`/chat/${taskId}/feedback`, {
-        rating: selectedStar,
-        comment: feedbackText.trim(),
-      });
-      setShowFeedbackInput(false);
-      setFeedbackText("");
-    } catch {
-      // silent
-    } finally {
-      setSubmitting(false);
-    }
-  }, [feedbackText, selectedStar, taskId]);
+    submitFeedback.mutate(
+      { task_id: taskId, rating: selectedStar, comment: feedbackText.trim() },
+      {
+        onSuccess: () => {
+          setShowFeedbackInput(false);
+          setFeedbackText("");
+        },
+      }
+    );
+  }, [feedbackText, selectedStar, taskId, submitFeedback]);
+
+  const activeRating = selectedStar ?? hoveredStar;
 
   const getFilled = (star: number) => {
     if (selectedStar !== null) return star <= selectedStar;
@@ -55,7 +59,17 @@ export function FeedbackStars({ taskId }: FeedbackStarsProps) {
 
   return (
     <div className="flex flex-col gap-1 mt-1">
-      <div className="flex items-center gap-0.5">
+      <div
+        className="flex items-center gap-0.5"
+        role="radiogroup"
+        aria-label="Rating"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          const current = selectedStar ?? 0;
+          if (e.key === "ArrowRight") handleClick(Math.min(5, current + 1));
+          if (e.key === "ArrowLeft") handleClick(Math.max(1, current - 1));
+        }}
+      >
         {[1, 2, 3, 4, 5].map((star) => (
           <button
             key={star}
@@ -64,13 +78,16 @@ export function FeedbackStars({ taskId }: FeedbackStarsProps) {
             onMouseEnter={() => setHoveredStar(star)}
             onMouseLeave={() => setHoveredStar(null)}
             onClick={() => handleClick(star)}
+            aria-label={`${star} star`}
           >
             <Star
               size={16}
               className={
-                getFilled(star)
-                  ? "text-primary fill-primary"
-                  : "text-muted-foreground/40"
+                getFilled(star) && activeRating
+                  ? getStarColor(activeRating)
+                  : getFilled(star)
+                    ? "text-primary fill-primary"
+                    : "text-muted-foreground/40"
               }
             />
           </button>
@@ -94,10 +111,10 @@ export function FeedbackStars({ taskId }: FeedbackStarsProps) {
             size="sm"
             variant="ghost"
             className="h-7 text-xs px-2"
-            disabled={submitting || !feedbackText.trim()}
+            disabled={submitFeedback.isPending || !feedbackText.trim()}
             onClick={handleSubmitFeedback}
           >
-            {submitting ? "..." : "Submit"}
+            {submitFeedback.isPending ? "..." : "Submit"}
           </Button>
         </div>
       )}
