@@ -1,116 +1,204 @@
 
 
-# Enhanced Analytics Dashboard and Real-Time WebSocket Events
+# Comprehensive Enhancement: Health, Conversations, Skills, UI/UX, and Advanced Features
 
 ## Overview
 
-Upgrade the analytics dashboard with dedicated Budget Monitor and Routing Performance components, add a cost breakdown pie chart with CSV export, and extend the existing WebSocket system to handle budget alerts and additional event types with toast notifications and query invalidation.
+Implement all 5 feature areas across the application: System Health monitoring page, Conversation management with soft delete/archive, Skills Marketplace page, UI/UX improvements (code splitting, keyboard shortcuts, notification center), and Advanced Features (bulk operations, global search, export, user preferences). All features connect to the existing external VPS API -- no database tables needed since data is managed by the backend.
 
-## Changes
+---
 
-### 1. New Component: Budget Monitor (`src/components/BudgetMonitor.tsx`)
+## 1. System Health Monitoring
 
-A dedicated card with two circular progress indicators (daily and monthly usage):
-- Circular progress rings rendered with SVG circles (stroke-dasharray technique)
-- Color coding: green (<75%), yellow (75-90%), red (>90%)
-- Dollar amounts formatted as "used / limit"
-- Warning banner when either daily or monthly exceeds 90%
-- "Paused" badge using existing Badge component when `is_paused` is true
-- "Hard Stop" indicator badge when `hard_stop_enabled` is true
-- Data sourced from existing `useBudgetUsage()` hook (endpoint: `/usage/budget`)
+### New Page: `src/pages/SystemStatus.tsx`
+- Full-page health dashboard with auto-refresh every 30 seconds
+- Service cards for Database, Redis, LLM Providers showing status, latency
+- Overall status badge (healthy/degraded/unhealthy)
+- Last updated timestamp
+- Uses existing `useConnectionStatus()` hook and `/health/deep` endpoint data
 
-### 2. New Component: Routing Performance (`src/components/RoutingPerformance.tsx`)
+### Navigation Update
+- Add "System Status" route to `src/App.tsx` at `/system-status`
+- Add nav item in `src/components/AppSidebar.tsx` with Activity icon
 
-A card with three lane columns (Green, Yellow, Red):
-- Each column shows: task count, success rate (with color-coded badge), average tokens, and feedback rating stars
-- Lane colors: green-500, yellow-500, red-500 backgrounds with appropriate opacity
-- Success rate visual: badge with green/yellow/red coloring based on threshold
-- Feedback stars: inline filled/unfilled star icons
-- Data from existing `useAnalyticsRouting()` hook
+---
 
-### 3. Enhanced Cost Breakdown in Analytics Page
+## 2. Conversation Management Enhancements
 
-Add to the existing Analytics page:
-- **Pie chart** showing cost distribution by model using recharts `PieChart` and `Pie` components (already installed)
-- **CSV Export button**: generates a CSV from `by_day` cost data and triggers download via blob URL
-- Both placed in a new row below the existing "Cost by Model" bar chart
+### Updated Chat Page (`src/pages/Chat.tsx`)
+- Add Active/Archived tabs in conversation sidebar
+- Conversations with `is_deleted: true` show in Archived tab
+- Archive button (soft delete via existing `DELETE /chat/conversations/{id}`)
+- Restore button in archived view via `POST /chat/conversations/{id}/restore` (or a PUT)
+- Show `total_cost_usd` on each conversation card
+- Bulk archive: multi-select with checkboxes, then "Archive Selected" button
+- Undo toast notification after archive using sonner's `toast()` with action
 
-### 4. Dashboard Header Budget Widget
+### Updated Types (`src/lib/types.ts`)
+- Add `is_deleted?: boolean` to `Conversation` interface
 
-Add a compact budget summary to the Dashboard page:
-- Small inline display showing daily and monthly percentages with color dots
-- Links to the Analytics page for full details
-- Uses existing `useBudgetUsage()` hook already imported in Dashboard
+### Updated Hook (`src/hooks/use-chat.ts`)
+- Add `useArchivedConversations()` query fetching `/chat/conversations?archived=true`
+- Add `restoreConversation(id)` function
 
-### 5. Extended WebSocket Event Handling (`src/hooks/use-websocket.ts`)
+---
 
-Expand the `WsTaskEvent` type to include new event types:
-- `budget.alert` -- triggers a toast warning and invalidates the `["budget"]` query
-- `task.awaiting_approval` -- triggers a toast and invalidates the `["approvals"]` query
-- `message.created` -- invalidates the `["chat-history"]` query for live chat updates
+## 3. Skills Marketplace (Dedicated Page)
 
-Add a callback system so consuming components can register event handlers:
-- New `onEvent` callback ref in the hook
-- `useEffect` in consuming components (Chat, Tasks) to react to relevant events
+### New Page: `src/pages/Skills.tsx`
+- Full-page skills marketplace (move the marketplace card from Settings into its own page)
+- Grid layout of skill cards with search and category filtering
+- Skill detail modal with full description, version, author, tags
+- Install/Uninstall toggle per skill
+- Usage stats section showing last used timestamp for installed skills
 
-### 6. Budget Alert Banner (`src/components/Layout.tsx`)
+### New Component: `src/components/SkillCard.tsx`
+- Card with skill name, version, category badge, description
+- Tags displayed as small badges
+- Install/Uninstall button with loading state
+- Author attribution and estimated cost per use
 
-Add a dismissible alert banner at the top of the Layout when budget exceeds 90%:
-- Uses the `Alert` component from shadcn/ui
-- Shows "Budget Warning: You have used X% of your daily/monthly budget"
-- Dismiss button that hides until next threshold crossing
-- Data from `useBudgetUsage()` hook
+### Navigation Update
+- Add "Skills" route to `src/App.tsx` at `/skills`
+- Add nav item in `src/components/AppSidebar.tsx` with Puzzle icon
+- Remove the skills marketplace section from Settings page
 
-### 7. Toast Notifications for WebSocket Events
+---
 
-In `src/contexts/WebSocketContext.tsx`, add an effect that shows toast notifications:
-- `task.completed` -- success toast with task ID
-- `task.failed` -- destructive toast with error info
-- `budget.alert` -- warning toast with link to analytics
-- Uses existing `sonner` toast library
+## 4. UI/UX Improvements
+
+### Code Splitting (`src/App.tsx`)
+- Use `React.lazy()` and `Suspense` for all page components
+- Add a loading fallback spinner component
+
+### Keyboard Shortcuts
+- New hook: `src/hooks/use-keyboard-shortcuts.ts`
+- Cmd/Ctrl+K: opens command palette (using existing cmdk dependency)
+- Cmd/Ctrl+N: navigate to create task
+- Esc: close modals
+- Register shortcuts in Layout component
+
+### Command Palette: `src/components/CommandPalette.tsx`
+- Uses the `cmdk` package (already installed)
+- Global search across pages
+- Quick navigation to any page
+- Quick actions: new task, new conversation, upload file
+
+### Notification Center: `src/components/NotificationCenter.tsx`
+- Bell icon in Header with unread count badge
+- Dropdown showing recent notifications (stored in local state from WebSocket events)
+- Mark as read functionality
+- Click to navigate to relevant item
+- Stores up to 50 recent notifications in-memory
+
+### Debounced Search
+- New utility hook: `src/hooks/use-debounce.ts`
+- Apply to all search inputs (Files, Skills, Tasks) with 300ms debounce
+
+### Mobile Improvements
+- Ensure modals use `max-h-[90vh]` on mobile
+- Touch-friendly button sizes already at 44px via shadcn defaults
+
+---
+
+## 5. Advanced Features
+
+### Global Search (`src/components/GlobalSearch.tsx`)
+- Integrated into the Command Palette
+- Searches across tasks (`/tasks?search=`), conversations, and files
+- Shows results grouped by type with icons
+
+### Export Functionality
+- Task export: CSV button on Tasks page (similar to existing analytics CSV export)
+- Conversation export: Download conversation history as text/markdown
+
+### User Preferences (`src/pages/Settings.tsx`)
+- New "Preferences" card in Settings with:
+  - Notification toggle (already exists, keep it)
+  - Budget alert threshold slider (default 90%)
+  - Default task priority selector
+  - Auto-archive completed tasks toggle
+- Store preferences in `localStorage` via a `usePreferences()` hook
+
+### Bulk Operations on Tasks Page
+- Checkbox column in task table for multi-select
+- "Select All" checkbox in header
+- Bulk actions bar: Delete selected, Export selected
+- Confirmation dialog for bulk delete
 
 ---
 
 ## Technical Details
 
-### Circular Progress (Budget Monitor)
+### File Changes Summary
 
-SVG-based rings using:
+**New Files (11):**
+- `src/pages/SystemStatus.tsx` -- Health monitoring dashboard
+- `src/pages/Skills.tsx` -- Skills marketplace page
+- `src/components/SkillCard.tsx` -- Skill display card
+- `src/components/CommandPalette.tsx` -- Cmd+K command palette
+- `src/components/NotificationCenter.tsx` -- Bell icon notification dropdown
+- `src/components/GlobalSearch.tsx` -- Search results in command palette
+- `src/hooks/use-keyboard-shortcuts.ts` -- Keyboard shortcut registration
+- `src/hooks/use-debounce.ts` -- Debounced value hook
+- `src/hooks/use-preferences.ts` -- localStorage preferences hook
+- `src/components/LoadingFallback.tsx` -- Suspense fallback spinner
+- `src/components/BulkActionBar.tsx` -- Floating bar for bulk operations
+
+**Modified Files (8):**
+- `src/App.tsx` -- Add routes, React.lazy, Suspense
+- `src/components/AppSidebar.tsx` -- Add Skills and System Status nav items
+- `src/components/Header.tsx` -- Add NotificationCenter
+- `src/components/Layout.tsx` -- Add CommandPalette and keyboard shortcuts
+- `src/pages/Chat.tsx` -- Archive/restore, bulk archive, cost display
+- `src/pages/Tasks.tsx` -- Bulk select, CSV export
+- `src/pages/Settings.tsx` -- Move skills to own page, add preferences card
+- `src/lib/types.ts` -- Add is_deleted to Conversation
+- `src/hooks/use-chat.ts` -- Add archived conversations query, restore function
+
+### Keyboard Shortcuts Implementation
+
 ```text
-circumference = 2 * PI * radius
-strokeDasharray = `${pct * circumference / 100} ${circumference}`
+Cmd/Ctrl + K  -->  Toggle CommandPalette open/close
+Cmd/Ctrl + N  -->  Navigate to /tasks and open create dialog
+Esc           -->  Close CommandPalette if open
 ```
-Two concentric circles: one for daily (inner), one for monthly (outer).
 
-### CSV Export
+Registered via `useEffect` in Layout, using `e.metaKey || e.ctrlKey` for cross-platform support.
+
+### Notification Center Data Flow
 
 ```text
-1. Map by_day array to "Date,Cost" rows
-2. Create Blob with text/csv type
-3. Create object URL and trigger download
-4. Revoke URL after download
+WebSocket event received
+  --> WebSocketContext dispatches toast (existing)
+  --> Also pushes to NotificationCenter's in-memory array
+  --> NotificationCenter shows unread count badge
+  --> User clicks bell to see list
+  --> Click on item navigates to relevant page
 ```
 
-### WebSocket Event Type Extension
+Notifications stored in React state (no persistence needed), limited to last 50 entries.
 
-Current types: `task.completed`, `task.failed`
-New types: `budget.alert`, `task.awaiting_approval`, `message.created`
+### Code Splitting Pattern
 
-The `onmessage` handler will be updated to parse `parsed.event` more broadly and dispatch to the `setLastEvent` state. Consuming components filter by `lastEvent.type`.
+```text
+const Dashboard = React.lazy(() => import("./pages/Dashboard"));
+const Analytics = React.lazy(() => import("./pages/Analytics"));
+// ... all pages
 
-### Query Invalidation on Events
+<Suspense fallback={<LoadingFallback />}>
+  <Routes>...</Routes>
+</Suspense>
+```
 
-In `WebSocketProvider`, add a `useEffect` watching `lastEvent` that calls `queryClient.invalidateQueries` for the relevant query keys based on event type. This provides real-time data refresh without polling.
+### Preferences Storage
 
-### Files Created
-- `src/components/BudgetMonitor.tsx` -- Circular progress budget display
-- `src/components/RoutingPerformance.tsx` -- Three-lane routing card
-
-### Files Modified
-- `src/hooks/use-websocket.ts` -- Extended event types
-- `src/contexts/WebSocketContext.tsx` -- Toast notifications and query invalidation
-- `src/pages/Analytics.tsx` -- Pie chart, CSV export, new components
-- `src/pages/Dashboard.tsx` -- Budget widget in header area
-- `src/components/Layout.tsx` -- Budget alert banner
-- `src/lib/types.ts` -- Extended WebSocket event types if needed
+```text
+localStorage key: "solutioniq_preferences"
+Value: JSON with fields:
+  - budgetAlertThreshold: number (default 90)
+  - defaultTaskPriority: number (default 3)
+  - autoArchiveCompleted: boolean (default false)
+  - notificationsEnabled: boolean (default true)
+```
 
